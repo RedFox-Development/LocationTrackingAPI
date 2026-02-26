@@ -74,7 +74,7 @@ export const typeDefs = `
   type Query {
     # Get teams for an event
     teams(event_id: Int!): [Team!]!
-    
+
     # Get location updates for a team
     updates(team: String!, limit: Int): [LocationUpdate!]!
     
