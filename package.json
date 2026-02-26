@@ -1,0 +1,19 @@
+{
+  "name": "location-tracker-api",
+  "description": "Vercel Serverless API for Location Tracker",
+  "type": "module",
+  "version": "1.0.0",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "vercel-build": "echo 'No build step needed for serverless functions'",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "graphql": "^16.8.1",
+    "graphql-yoga": "^5.1.1",
+    "pg": "^8.11.3"
+  },
+  "private": true
+}
