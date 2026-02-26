@@ -6,8 +6,10 @@ CREATE TABLE IF NOT EXISTS events (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     keycode VARCHAR(255) NOT NULL,
-    image_url TEXT,
-    logo_url TEXT,
+    image_data TEXT,
+    image_mime_type VARCHAR(50),
+    logo_data TEXT,
+    logo_mime_type VARCHAR(50),
     UNIQUE(name, keycode)
 );
 
@@ -40,3 +42,7 @@ CREATE INDEX IF NOT EXISTS idx_events_name_keycode ON events(name, keycode);
 COMMENT ON TABLE events IS 'Tracking events with authentication';
 COMMENT ON TABLE teams IS 'Teams participating in events';
 COMMENT ON TABLE location_updates IS 'Location updates from team devices';
+COMMENT ON COLUMN events.image_data IS 'Base64 encoded event image data';
+COMMENT ON COLUMN events.image_mime_type IS 'MIME type of event image (e.g., image/png, image/jpeg)';
+COMMENT ON COLUMN events.logo_data IS 'Base64 encoded organization logo data';
+COMMENT ON COLUMN events.logo_mime_type IS 'MIME type of logo (e.g., image/png, image/jpeg)';

@@ -39,7 +39,7 @@ export const resolvers = {
     // Get a specific event
     event: async (_, { id }) => {
       const result = await query(
-        `SELECT id, name, keycode, image_url, logo_url
+        `SELECT id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type
          FROM events
          WHERE id = $1`,
         [id]
@@ -51,7 +51,7 @@ export const resolvers = {
     login: async (_, { event_name, keycode }) => {
       // Find event by name and keycode
       const eventResult = await query(
-        `SELECT id, name, keycode, image_url, logo_url
+        `SELECT id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type
          FROM events
          WHERE name = $1 AND keycode = $2`,
         [event_name, keycode]
@@ -82,14 +82,14 @@ export const resolvers = {
 
   Mutation: {
     // Create a new event
-    createEvent: async (_, { name, image_url, logo_url }) => {
+    createEvent: async (_, { name, image_data, image_mime_type, logo_data, logo_mime_type }) => {
       const keycode = generateKeycode();
       
       const result = await query(
-        `INSERT INTO events (name, keycode, image_url, logo_url)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id, name, keycode, image_url, logo_url`,
-        [name, keycode, image_url || null, logo_url || null]
+        `INSERT INTO events (name, keycode, image_data, image_mime_type, logo_data, logo_mime_type)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type`,
+        [name, keycode, image_data || null, image_mime_type || null, logo_data || null, logo_mime_type || null]
       );
       
       return result.rows[0];
@@ -142,7 +142,7 @@ export const resolvers = {
   Team: {
     event: async (parent) => {
       const result = await query(
-        `SELECT id, name, keycode, image_url, logo_url
+        `SELECT id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type
          FROM events
          WHERE id = $1`,
         [parent.event_id]

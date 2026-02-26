@@ -10,8 +10,10 @@ CREATE TABLE IF NOT EXISTS events (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     keycode VARCHAR(255) NOT NULL,
-    image_url TEXT,
-    logo_url TEXT,
+    image_data TEXT,
+    image_mime_type VARCHAR(50),
+    logo_data TEXT,
+    logo_mime_type VARCHAR(50),
     UNIQUE(name, keycode)
 );
 

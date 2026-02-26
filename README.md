@@ -43,9 +43,11 @@ Both client applications (Flutter and React web) communicate exclusively with th
 
 The API uses PostgreSQL with three main tables:
 
-- **events**: Tracking events (id, name, keycode, image_url, logo_url)
+- **events**: Tracking events (id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type)
 - **teams**: Teams participating in events (id, event_id, name, color)
 - **location_updates**: Location updates from team devices (id, team, event, lat, lon, timestamp)
+
+Images are stored as base64 encoded data in the database for portability and self-containment.
 
 See [db_setup.sql](db_setup.sql) for the complete schema.
 

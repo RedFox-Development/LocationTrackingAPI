@@ -15,10 +15,14 @@ Or using a PostgreSQL client of your choice.
 ## Migration History
 
 ### 001_add_event_images.sql (2026-02-26)
-- Adds `image_url` column to `events` table
-- Adds `logo_url` column to `events` table
-- These fields store URLs for event images and organization logos
-- Both fields are optional (nullable)
+- Adds `image_data` column to `events` table (stores base64 encoded image)
+- Adds `image_mime_type` column to `events` table (stores MIME type like image/png)
+- Adds `logo_data` column to `events` table (stores base64 encoded logo)
+- Adds `logo_mime_type` column to `events` table (stores MIME type)
+- Removes old `image_url` and `logo_url` columns if they exist
+- All fields are optional (nullable)
+
+**Important**: Images are now stored in the database as base64 data rather than external URLs
 
 ## Notes
 

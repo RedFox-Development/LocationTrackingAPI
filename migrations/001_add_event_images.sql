@@ -1,15 +1,29 @@
--- Migration: Add image_url and logo_url to events table
+-- Migration: Add image storage to events table
 -- Run this migration on existing databases to add image and logo support
 -- Date: 2026-02-26
 
--- Add image_url column to events table
-ALTER TABLE events 
-ADD COLUMN IF NOT EXISTS image_url TEXT;
+-- Drop old URL columns if they exist
+ALTER TABLE events DROP COLUMN IF EXISTS image_url;
+ALTER TABLE events DROP COLUMN IF EXISTS logo_url;
 
--- Add logo_url column to events table
+-- Add image_data column to events table (stores base64 encoded image)
 ALTER TABLE events 
-ADD COLUMN IF NOT EXISTS logo_url TEXT;
+ADD COLUMN IF NOT EXISTS image_data TEXT;
+
+-- Add image_mime_type column to events table
+ALTER TABLE events 
+ADD COLUMN IF NOT EXISTS image_mime_type VARCHAR(50);
+
+-- Add logo_data column to events table (stores base64 encoded logo)
+ALTER TABLE events 
+ADD COLUMN IF NOT EXISTS logo_data TEXT;
+
+-- Add logo_mime_type column to events table
+ALTER TABLE events 
+ADD COLUMN IF NOT EXISTS logo_mime_type VARCHAR(50);
 
 -- Add comments
-COMMENT ON COLUMN events.image_url IS 'URL of the event image shown in mobile app';
-COMMENT ON COLUMN events.logo_url IS 'URL of the organization logo for QR codes';
+COMMENT ON COLUMN events.image_data IS 'Base64 encoded event image data';
+COMMENT ON COLUMN events.image_mime_type IS 'MIME type of event image (e.g., image/png, image/jpeg)';
+COMMENT ON COLUMN events.logo_data IS 'Base64 encoded organization logo data';
+COMMENT ON COLUMN events.logo_mime_type IS 'MIME type of logo (e.g., image/png, image/jpeg)';
