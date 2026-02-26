@@ -8,6 +8,8 @@ export const typeDefs = `
     id: Int!
     name: String!
     keycode: String!
+    image_url: String
+    logo_url: String
     teams: [Team!]!
   }
 
@@ -56,7 +58,7 @@ export const typeDefs = `
   # Mutations
   type Mutation {
     # Create a new event (keycode is auto-generated)
-    createEvent(name: String!): Event!
+    createEvent(name: String!, image_url: String, logo_url: String): Event!
     
     # Create a new team
     createTeam(event_id: Int!, name: String!, color: String): Team!

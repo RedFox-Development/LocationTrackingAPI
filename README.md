@@ -43,11 +43,22 @@ Both client applications (Flutter and React web) communicate exclusively with th
 
 The API uses PostgreSQL with three main tables:
 
-- **events**: Tracking events (id, name, keycode)
+- **events**: Tracking events (id, name, keycode, image_url, logo_url)
 - **teams**: Teams participating in events (id, event_id, name, color)
 - **location_updates**: Location updates from team devices (id, team, event, lat, lon, timestamp)
 
 See [db_setup.sql](db_setup.sql) for the complete schema.
+
+### Database Migrations
+
+If you have an existing database, you may need to run migrations to update the schema:
+
+```bash
+# Run migrations on your PostgreSQL database
+psql -h <host> -U <user> -d <database> -f migrations/001_add_event_images.sql
+```
+
+See the [migrations folder](migrations/) for available migrations and documentation.
 
 ## GraphQL Schema
 
