@@ -53,6 +53,9 @@ export const typeDefs = `
     # Get a specific event
     event(id: Int!): Event
     
+    # Get public event data by name (images only, no keycode)
+    eventByName(event_name: String!): Event
+    
     # Login to an event
     login(event_name: String!, keycode: String!): LoginResponse!
   }

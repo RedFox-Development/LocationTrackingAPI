@@ -47,6 +47,18 @@ export const resolvers = {
       return result.rows[0] || null;
     },
 
+    // Get public event data by name (for mobile app to fetch images)
+    // Note: Does not return keycode for security
+    eventByName: async (_, { event_name }) => {
+      const result = await query(
+        `SELECT id, name, '' as keycode, image_data, image_mime_type, logo_data, logo_mime_type
+         FROM events
+         WHERE name = $1`,
+        [event_name]
+      );
+      return result.rows[0] || null;
+    },
+
     // Login to an event
     login: async (_, { event_name, keycode }) => {
       // Find event by name and keycode
