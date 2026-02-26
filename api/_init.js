@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS events (
     image_mime_type VARCHAR(50),
     logo_data TEXT,
     logo_mime_type VARCHAR(50),
+    organization_name VARCHAR(255),
+    expiration_date DATE,
     UNIQUE(name, keycode)
 );
 
@@ -23,6 +25,7 @@ CREATE TABLE IF NOT EXISTS teams (
     event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     color VARCHAR(7) DEFAULT '#3B82F6',
+    expiration_date DATE,
     UNIQUE(event_id, name)
 );
 
@@ -41,6 +44,8 @@ CREATE INDEX IF NOT EXISTS idx_teams_event_id ON teams(event_id);
 CREATE INDEX IF NOT EXISTS idx_location_updates_team ON location_updates(team);
 CREATE INDEX IF NOT EXISTS idx_location_updates_timestamp ON location_updates(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_events_name_keycode ON events(name, keycode);
+CREATE INDEX IF NOT EXISTS idx_events_expiration ON events(expiration_date);
+CREATE INDEX IF NOT EXISTS idx_teams_expiration ON teams(expiration_date);
 `;
 
 let initialized = false;

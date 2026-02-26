@@ -12,6 +12,8 @@ export const typeDefs = `
     image_mime_type: String
     logo_data: String
     logo_mime_type: String
+    organization_name: String
+    expiration_date: String
     teams: [Team!]!
   }
 
@@ -19,7 +21,8 @@ export const typeDefs = `
   type Team {
     id: Int!
     event_id: Int!
-    name: String!
+    nxpiration_date: String
+    eame: String!
     color: String!
     event: Event
     updates: [LocationUpdate!]!
@@ -39,14 +42,43 @@ export const typeDefs = `
   type LoginResponse {
     success: Boolean!
     event: Event!
-    teams: [Team!]!
+   
+
+  # Export data response
+  type ExportData {
+    event: Event!
+    teams: [TeamExport!]!
+    startDate: String
+    endDate: String
+  }
+
+  # Team export with location history
+  type TeamExport {
+    id: Int!
+    name: String!
+    color: String!
+    expiration_date: String
+    locations: [LocationUpdate!]!
+  }
+
+    
+    # Export event data (requires authentication)
+    exportEventData(event_id: Int!, keycode: String!, startDate: String, endDate: String): ExportData!
+  # Cleanup result
+  type CleanupResult {
+    deletedTeams: Int!
+    deletedEvents: Int!
+    message: String!
+  } teams: [Team!]!
   }
 
   # Queries
-  type Query {
-    # Get all teams for an event
-    teams(event_id: Int!): [Team!]!
+  ty  organization_name: String
+      expiration_date: String
+    ): Event!
     
+    # Create a new team
+    createTeam(event_id: Int!, name: String!, color: String, expiration_date
     # Get location updates for a team
     updates(team: String!, limit: Int): [LocationUpdate!]!
     
@@ -78,6 +110,40 @@ export const typeDefs = `
     # Submit a location update
     createLocationUpdate(
       team: String!
+    
+    # Update event image (requires authentication)
+    updateEventImage(
+      event_id: Int!
+      keycode: String!
+      image_data: String!
+      image_mime_type: String!
+    ): Event!
+    
+    # Update event logo (requires authentication)
+    updateEventLogo(
+      event_id: Int!
+      keycode: String!
+      logo_data: String!
+      logo_mime_type: String!
+    ): Event!
+    
+    # Update organization name (requires authentication)
+    updateOrganizationName(
+      event_id: Int!
+      keycode: String!
+      organization_name: String!
+    ): Event!
+    
+    # Update team color (requires authentication via event)
+    updateTeamColor(
+      team_id: Int!
+      event_id: Int!
+      keycode: String!
+      color: String!
+    ): Team!
+    
+    # Cleanup expired data (internal/admin use)
+    cleanupExpiredData(secret: String!): CleanupResult!
       event: String!
       lat: Float!
       lon: Float!

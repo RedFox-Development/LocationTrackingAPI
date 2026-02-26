@@ -3,5 +3,11 @@
   "regions": ["arn1"],
   "buildCommand": "echo 'No build needed'",
   "outputDirectory": ".",
-  "installCommand": "npm install"
+  "installCommand": "npm install",
+  "crons": [
+    {
+      "path": "/api/cleanup",
+      "schedule": "0 2 * * *"
+    }
+  ]
 }
