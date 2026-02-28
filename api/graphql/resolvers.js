@@ -39,7 +39,7 @@ export const resolvers = {
     // Get a specific event
     event: async (_, { id }) => {
       const result = await query(
-        `SELECT id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date
+        `SELECT id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
          FROM events
          WHERE id = $1`,
         [id]
@@ -51,7 +51,7 @@ export const resolvers = {
     // Note: Does not return keycode for security
     eventByName: async (_, { event_name }) => {
       const result = await query(
-        `SELECT id, name, '' as keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date
+        `SELECT id, name, '' as keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
          FROM events
          WHERE name = $1`,
         [event_name]
@@ -63,7 +63,7 @@ export const resolvers = {
     login: async (_, { event_name, keycode }) => {
       // Find event by name and keycode
       const eventResult = await query(
-        `SELECT id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date
+        `SELECT id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
          FROM events
          WHERE name = $1 AND keycode = $2`,
         [event_name, keycode]
@@ -95,7 +95,7 @@ export const resolvers = {
     exportEventData: async (_, { event_id, keycode, startDate, endDate }) => {
       // Authenticate
       const eventResult = await query(
-        `SELECT id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date
+        `SELECT id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
          FROM events
          WHERE id = $1 AND keycode = $2`,
         [event_id, keycode]
@@ -168,7 +168,7 @@ export const resolvers = {
       const result = await query(
         `INSERT INTO events (name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date`,
+         RETURNING id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
         [name, keycode, image_data || null, image_mime_type || null, logo_data || null, logo_mime_type || null, organization_name || null, expiration_date || null]
       );
       
@@ -221,7 +221,7 @@ export const resolvers = {
         `UPDATE events 
          SET image_data = $1, image_mime_type = $2
          WHERE id = $3
-         RETURNING id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date`,
+         RETURNING id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
         [image_data, image_mime_type, event_id]
       );
 
@@ -245,7 +245,7 @@ export const resolvers = {
         `UPDATE events 
          SET logo_data = $1, logo_mime_type = $2
          WHERE id = $3
-         RETURNING id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date`,
+         RETURNING id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
         [logo_data, logo_mime_type, event_id]
       );
 
@@ -269,7 +269,7 @@ export const resolvers = {
         `UPDATE events 
          SET organization_name = $1
          WHERE id = $2
-         RETURNING id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date`,
+         RETURNING id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
         [organization_name, event_id]
       );
 
@@ -305,6 +305,61 @@ export const resolvers = {
          WHERE id = $2
          RETURNING id, event_id, name, color, expiration_date`,
         [color, team_id]
+      );
+
+      return result.rows[0];
+    },
+
+    // Update event geofence (requires authentication)
+    updateEventGeofence: async (_, { event_id, keycode, geofence_data }) => {
+      // Verify keycode
+      const verifyResult = await query(
+        `SELECT id FROM events WHERE id = $1 AND keycode = $2`,
+        [event_id, keycode]
+      );
+
+      if (verifyResult.rows.length === 0) {
+        throw new Error('Invalid event ID or keycode');
+      }
+
+      // Validate JSON format
+      try {
+        JSON.parse(geofence_data);
+      } catch (error) {
+        throw new Error('Invalid geofence data format - must be valid JSON');
+      }
+
+      // Update geofence
+      const result = await query(
+        `UPDATE events 
+         SET geofence_data = $1
+         WHERE id = $2
+         RETURNING id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
+        [geofence_data, event_id]
+      );
+
+      return result.rows[0];
+    },
+
+    // Delete event geofence (requires authentication)
+    deleteEventGeofence: async (_, { event_id, keycode }) => {
+      // Verify keycode
+      const verifyResult = await query(
+        `SELECT id FROM events WHERE id = $1 AND keycode = $2`,
+        [event_id, keycode]
+      );
+
+      if (verifyResult.rows.length === 0) {
+        throw new Error('Invalid event ID or keycode');
+      }
+
+      // Delete geofence
+      const result = await query(
+        `UPDATE events 
+         SET geofence_data = NULL
+         WHERE id = $1
+         RETURNING id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
+        [event_id]
       );
 
       return result.rows[0];
@@ -359,7 +414,7 @@ export const resolvers = {
   Team: {
     event: async (parent) => {
       const result = await query(
-        `SELECT id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date
+        `SELECT id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
          FROM events
          WHERE id = $1`,
         [parent.event_id]

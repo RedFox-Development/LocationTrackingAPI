@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS events (
     image_mime_type VARCHAR(50),
     logo_data TEXT,
     logo_mime_type VARCHAR(50),
+    geofence_data TEXT,
     UNIQUE(name, keycode)
 );
 
@@ -46,3 +47,8 @@ COMMENT ON COLUMN events.image_data IS 'Base64 encoded event image data';
 COMMENT ON COLUMN events.image_mime_type IS 'MIME type of event image (e.g., image/png, image/jpeg)';
 COMMENT ON COLUMN events.logo_data IS 'Base64 encoded organization logo data';
 COMMENT ON COLUMN events.logo_mime_type IS 'MIME type of logo (e.g., image/png, image/jpeg)';
+
+-- Migrations for existing databases
+-- Add geofence_data column to events table if it doesn't exist
+ALTER TABLE events ADD COLUMN IF NOT EXISTS geofence_data TEXT;
+COMMENT ON COLUMN events.geofence_data IS 'Geofence polygon coordinates as JSON array of [lat, lon] pairs';

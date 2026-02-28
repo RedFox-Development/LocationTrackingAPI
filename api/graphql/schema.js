@@ -14,6 +14,7 @@ export const typeDefs = `
     logo_mime_type: String
     organization_name: String
     expiration_date: String
+    geofence_data: String
     teams: [Team!]!
   }
 
@@ -152,6 +153,19 @@ export const typeDefs = `
       keycode: String!
       color: String!
     ): Team!
+    
+    # Update event geofence (requires authentication)
+    updateEventGeofence(
+      event_id: Int!
+      keycode: String!
+      geofence_data: String!
+    ): Event!
+    
+    # Delete event geofence (requires authentication)
+    deleteEventGeofence(
+      event_id: Int!
+      keycode: String!
+    ): Event!
     
     # Cleanup expired data (internal/admin use)
     cleanupExpiredData(secret: String!): CleanupResult!
