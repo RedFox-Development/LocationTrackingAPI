@@ -153,6 +153,13 @@ export const typeDefs = `
       keycode: String!
       color: String!
     ): Team!
+
+    # Delete team (requires authentication via event)
+    deleteTeam(
+      team_id: Int!
+      event_id: Int!
+      keycode: String!
+    ): Team!
     
     # Update event geofence (requires authentication)
     updateEventGeofence(

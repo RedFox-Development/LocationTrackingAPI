@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS events (
     image_mime_type VARCHAR(50),
     logo_data TEXT,
     logo_mime_type VARCHAR(50),
+  geofence_data TEXT,
     organization_name VARCHAR(255),
     expiration_date DATE,
     UNIQUE(name, keycode)
@@ -46,6 +47,9 @@ CREATE INDEX IF NOT EXISTS idx_location_updates_timestamp ON location_updates(ti
 CREATE INDEX IF NOT EXISTS idx_events_name_keycode ON events(name, keycode);
 CREATE INDEX IF NOT EXISTS idx_events_expiration ON events(expiration_date);
 CREATE INDEX IF NOT EXISTS idx_teams_expiration ON teams(expiration_date);
+
+-- Backward-compatible column migrations for existing databases
+ALTER TABLE events ADD COLUMN IF NOT EXISTS geofence_data TEXT;
 `;
 
 let initialized = false;

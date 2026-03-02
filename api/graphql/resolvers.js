@@ -310,6 +310,42 @@ export const resolvers = {
       return result.rows[0];
     },
 
+    // Delete team (requires authentication via event)
+    deleteTeam: async (_, { team_id, event_id, keycode }) => {
+      // Verify keycode
+      const verifyResult = await query(
+        `SELECT id FROM events WHERE id = $1 AND keycode = $2`,
+        [event_id, keycode]
+      );
+
+      if (verifyResult.rows.length === 0) {
+        throw new Error('Invalid event ID or keycode');
+      }
+
+      // Verify team belongs to event
+      const teamResult = await query(
+        `SELECT id, event_id, name, color, expiration_date
+         FROM teams
+         WHERE id = $1 AND event_id = $2`,
+        [team_id, event_id]
+      );
+
+      if (teamResult.rows.length === 0) {
+        throw new Error('Team not found or does not belong to this event');
+      }
+
+      const teamToDelete = teamResult.rows[0];
+
+      // Delete team
+      await query(
+        `DELETE FROM teams
+         WHERE id = $1 AND event_id = $2`,
+        [team_id, event_id]
+      );
+
+      return teamToDelete;
+    },
+
     // Update event geofence (requires authentication)
     updateEventGeofence: async (_, { event_id, keycode, geofence_data }) => {
       // Verify keycode
