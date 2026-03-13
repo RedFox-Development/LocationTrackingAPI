@@ -8,6 +8,31 @@ import { generateKeycode } from '../_utils.js';
 const WAYPOINT_VISIT_RADIUS_METERS = 15;
 const WAYPOINT_CONSECUTIVE_UPDATES_REQUIRED = 4;
 
+function toIsoDateTime(value) {
+  if (value == null) return value;
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (typeof value === 'number') {
+    const fromMs = new Date(value);
+    return Number.isNaN(fromMs.getTime()) ? String(value) : fromMs.toISOString();
+  }
+
+  if (typeof value === 'string') {
+    if (/^\d+$/.test(value)) {
+      const fromMsString = new Date(Number(value));
+      return Number.isNaN(fromMsString.getTime()) ? value : fromMsString.toISOString();
+    }
+
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
+  }
+
+  return String(value);
+}
+
 function haversineDistanceMeters(lat1, lon1, lat2, lon2) {
   const toRad = (deg) => (deg * Math.PI) / 180;
   const earthRadiusMeters = 6371000;
@@ -48,6 +73,7 @@ export const resolvers = {
         ...r,
         lat: parseFloat(r.lat),
         lon: parseFloat(r.lon),
+        timestamp: toIsoDateTime(r.timestamp),
       }));
     },
 
@@ -161,6 +187,7 @@ export const resolvers = {
               ...r,
               lat: parseFloat(r.lat),
               lon: parseFloat(r.lon),
+              timestamp: toIsoDateTime(r.timestamp),
             })),
           };
         })
@@ -188,6 +215,7 @@ export const resolvers = {
         ...row,
         lat: parseFloat(row.lat),
         lon: parseFloat(row.lon),
+        created_at: toIsoDateTime(row.created_at),
       }));
     },
 
@@ -217,6 +245,7 @@ export const resolvers = {
         ...row,
         lat: parseFloat(row.lat),
         lon: parseFloat(row.lon),
+        visited_at: toIsoDateTime(row.visited_at),
       }));
     },
   },
@@ -345,6 +374,7 @@ export const resolvers = {
         ...row,
         lat: parseFloat(row.lat),
         lon: parseFloat(row.lon),
+        timestamp: toIsoDateTime(row.timestamp),
       };
     },
 
@@ -371,6 +401,7 @@ export const resolvers = {
         ...row,
         lat: parseFloat(row.lat),
         lon: parseFloat(row.lon),
+        created_at: toIsoDateTime(row.created_at),
       };
     },
 
@@ -419,6 +450,7 @@ export const resolvers = {
         ...row,
         lat: parseFloat(row.lat),
         lon: parseFloat(row.lon),
+        created_at: toIsoDateTime(row.created_at),
       };
     },
 
@@ -449,6 +481,7 @@ export const resolvers = {
         ...row,
         lat: parseFloat(row.lat),
         lon: parseFloat(row.lon),
+        created_at: toIsoDateTime(row.created_at),
       };
     },
 
@@ -735,6 +768,7 @@ export const resolvers = {
         ...r,
         lat: parseFloat(r.lat),
         lon: parseFloat(r.lon),
+        timestamp: toIsoDateTime(r.timestamp),
       }));
     },
   },
