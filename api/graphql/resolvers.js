@@ -148,6 +148,21 @@ export const resolvers = {
 
       const event = eventResult.rows[0];
 
+      const waypointsResult = await query(
+        `SELECT id, event_id, name, lat, lon, is_required, created_at
+         FROM waypoints
+         WHERE event_id = $1
+         ORDER BY created_at ASC, id ASC`,
+        [event.id]
+      );
+
+      const waypoints = waypointsResult.rows.map((row) => ({
+        ...row,
+        lat: parseFloat(row.lat),
+        lon: parseFloat(row.lon),
+        created_at: toIsoDateTime(row.created_at),
+      }));
+
       // Get teams for this event
       const teamsResult = await query(
         `SELECT id, event_id, name, color, expiration_date
@@ -163,9 +178,9 @@ export const resolvers = {
           let locationQuery = `
             SELECT id, team, event, lat, lon, timestamp
             FROM location_updates
-            WHERE team = $1`;
+            WHERE team = $1 AND event = $2`;
           
-          const params = [team.name];
+          const params = [team.name, event.name];
           
           if (startDate) {
             locationQuery += ` AND timestamp >= $${params.length + 1}`;
@@ -183,6 +198,7 @@ export const resolvers = {
           
           return {
             ...team,
+            locationCount: locationResult.rows.length,
             locations: locationResult.rows.map(r => ({
               ...r,
               lat: parseFloat(r.lat),
@@ -196,6 +212,7 @@ export const resolvers = {
       return {
         event,
         teams,
+        waypoints,
         startDate: startDate || null,
         endDate: endDate || null,
       };

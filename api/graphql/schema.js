@@ -75,6 +75,7 @@ export const typeDefs = `
   type ExportData {
     event: Event!
     teams: [TeamExport!]!
+    waypoints: [Waypoint!]!
     startDate: String
     endDate: String
   }
