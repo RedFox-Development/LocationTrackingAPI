@@ -59,15 +59,15 @@ export const resolvers = {
       return result.rows;
     },
 
-    // Get location updates for a team
-    updates: async (_, { team, limit = 100 }) => {
+    // Get location updates for a team in an event
+    updates: async (_, { event, team, limit = 100 }) => {
       const result = await query(
         `SELECT id, team, event, lat, lon, timestamp
          FROM location_updates
-         WHERE team = $1
+         WHERE event = $1 AND team = $2
          ORDER BY timestamp DESC
-         LIMIT $2`,
-        [team, limit]
+         LIMIT $3`,
+        [event, team, limit]
       );
       return result.rows.map(r => ({
         ...r,
@@ -313,10 +313,10 @@ export const resolvers = {
               const recentUpdatesResult = await query(
                 `SELECT lat, lon
                  FROM location_updates
-                 WHERE team = $1
+                 WHERE team = $1 AND event = $2
                  ORDER BY timestamp DESC, id DESC
-                 LIMIT $2`,
-                [team, WAYPOINT_CONSECUTIVE_UPDATES_REQUIRED]
+                 LIMIT $3`,
+                [team, event, WAYPOINT_CONSECUTIVE_UPDATES_REQUIRED]
               );
 
               if (recentUpdatesResult.rows.length === WAYPOINT_CONSECUTIVE_UPDATES_REQUIRED) {

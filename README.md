@@ -111,7 +111,7 @@ type LocationUpdate {
 ### Queries
 
 - `teams(event_id: Int!): [Team!]!` - Get all teams for an event
-- `updates(team: String!, limit: Int): [LocationUpdate!]!` - Get location updates for a team
+- `updates(event: String!, team: String!, limit: Int): [LocationUpdate!]!` - Get location updates for a team in an event
 - `event(id: Int!): Event` - Get a specific event
 - `login(event_name: String!, keycode: String!): LoginResponse!` - Login to an event
 
