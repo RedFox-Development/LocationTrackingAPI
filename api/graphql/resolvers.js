@@ -375,7 +375,7 @@ export const resolvers = {
     },
 
     // Update a waypoint (requires authentication)
-    updateWaypoint: async (_, { waypoint_id, event_id, keycode, name, is_required }) => {
+    updateWaypoint: async (_, { waypoint_id, event_id, keycode, name, is_required, lat, lon }) => {
       const verifyResult = await query(
         `SELECT id FROM events WHERE id = $1 AND keycode = $2`,
         [event_id, keycode]
@@ -386,7 +386,7 @@ export const resolvers = {
       }
 
       const waypointVerifyResult = await query(
-        `SELECT id, name, is_required
+        `SELECT id, name, is_required, lat, lon
          FROM waypoints
          WHERE id = $1 AND event_id = $2`,
         [waypoint_id, event_id]
@@ -399,13 +399,19 @@ export const resolvers = {
       const currentWaypoint = waypointVerifyResult.rows[0];
       const nextName = typeof name === 'string' ? name : currentWaypoint.name;
       const nextRequired = typeof is_required === 'boolean' ? is_required : currentWaypoint.is_required;
+      const nextLat = typeof lat === 'number' && Number.isFinite(lat)
+        ? lat
+        : parseFloat(currentWaypoint.lat);
+      const nextLon = typeof lon === 'number' && Number.isFinite(lon)
+        ? lon
+        : parseFloat(currentWaypoint.lon);
 
       const result = await query(
         `UPDATE waypoints
-         SET name = $1, is_required = $2
-         WHERE id = $3
+         SET name = $1, is_required = $2, lat = $3, lon = $4
+         WHERE id = $5
          RETURNING id, event_id, name, lat, lon, is_required, created_at`,
-        [nextName, nextRequired, waypoint_id]
+        [nextName, nextRequired, nextLat, nextLon, waypoint_id]
       );
 
       const row = result.rows[0];

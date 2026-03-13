@@ -222,6 +222,8 @@ export const typeDefs = `
       keycode: String!
       name: String
       is_required: Boolean
+      lat: Float
+      lon: Float
     ): Waypoint!
 
     # Delete a waypoint (requires authentication)
