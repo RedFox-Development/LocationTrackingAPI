@@ -11,8 +11,10 @@ import { executeGraphQL } from './_utils.js';
 const cleanupQuery = `
   mutation CleanupExpiredData($secret: String!) {
     cleanupExpiredData(secret: $secret) {
+      deletedLocationUpdates
       deletedTeams
       deletedEvents
+      retentionDays
       message
     }
   }

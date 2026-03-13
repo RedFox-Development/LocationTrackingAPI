@@ -91,8 +91,10 @@ export const typeDefs = `
 
   # Cleanup result
   type CleanupResult {
+    deletedLocationUpdates: Int!
     deletedTeams: Int!
     deletedEvents: Int!
+    retentionDays: Int!
     message: String!
   }
 

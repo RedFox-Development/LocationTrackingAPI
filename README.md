@@ -39,6 +39,21 @@ Both client applications (Flutter and React web) communicate exclusively with th
 - Development: `http://localhost:3000/api`
 - Production: `https://your-project.vercel.app/api`
 
+## Automated Data Retention
+
+The API supports automated cleanup for compliance requirements.
+
+- A Vercel Cron job calls `/api/cleanup` once per day at `00:00` (UTC).
+- `location_updates` older than `90` days are automatically deleted.
+- Expired teams/events are also removed based on `expiration_date`.
+
+Environment variables:
+
+- `CLEANUP_SECRET`: required secret used by the cleanup mutation.
+- `LOCATION_RETENTION_DAYS`: optional retention window for `location_updates` (default: `90`).
+
+This keeps the service low-maintenance while enforcing retention limits for GDPR/Play policy needs.
+
 ## Database Schema
 
 The API uses PostgreSQL with three main tables:

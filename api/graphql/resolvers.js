@@ -657,6 +657,20 @@ export const resolvers = {
         throw new Error('Invalid secret');
       }
 
+      const retentionDays = Number(process.env.LOCATION_RETENTION_DAYS || 90);
+      if (!Number.isInteger(retentionDays) || retentionDays <= 0) {
+        throw new Error('Invalid LOCATION_RETENTION_DAYS value');
+      }
+
+      // Delete old location updates for GDPR/compliance retention.
+      const updatesResult = await query(
+        `DELETE FROM location_updates
+         WHERE timestamp < NOW() - ($1 * INTERVAL '1 day')
+         RETURNING id`,
+        [retentionDays]
+      );
+      const deletedLocationUpdates = updatesResult.rowCount;
+
       // Delete expired teams
       const teamsResult = await query(
         `DELETE FROM teams 
@@ -674,9 +688,11 @@ export const resolvers = {
       const deletedEvents = eventsResult.rowCount;
 
       return {
+        deletedLocationUpdates,
         deletedTeams,
         deletedEvents,
-        message: `Cleanup complete: ${deletedTeams} teams and ${deletedEvents} events removed`,
+        retentionDays,
+        message: `Cleanup complete: ${deletedLocationUpdates} location updates (older than ${retentionDays} days), ${deletedTeams} teams and ${deletedEvents} events removed`,
       };
     },
   },
