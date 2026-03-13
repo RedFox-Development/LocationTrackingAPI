@@ -5,6 +5,21 @@
 import { query } from '../_db.js';
 import { generateKeycode } from '../_utils.js';
 
+const WAYPOINT_VISIT_RADIUS_METERS = 15;
+const WAYPOINT_CONSECUTIVE_UPDATES_REQUIRED = 4;
+
+function haversineDistanceMeters(lat1, lon1, lat2, lon2) {
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const earthRadiusMeters = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusMeters * c;
+}
+
 export const resolvers = {
   Query: {
     // Get teams for an event
@@ -158,6 +173,52 @@ export const resolvers = {
         endDate: endDate || null,
       };
     },
+
+    // Get waypoints for an event
+    waypoints: async (_, { event_id }) => {
+      const result = await query(
+        `SELECT id, event_id, name, lat, lon, is_required, created_at
+         FROM waypoints
+         WHERE event_id = $1
+         ORDER BY created_at ASC, id ASC`,
+        [event_id]
+      );
+
+      return result.rows.map((row) => ({
+        ...row,
+        lat: parseFloat(row.lat),
+        lon: parseFloat(row.lon),
+      }));
+    },
+
+    // Get waypoint visits for an event
+    waypointVisits: async (_, { event_id }) => {
+      const result = await query(
+        `SELECT
+           wv.id,
+           wv.waypoint_id,
+           wv.team_id,
+           t.name AS team_name,
+           t.color AS team_color,
+           w.name AS waypoint_name,
+           w.is_required AS waypoint_is_required,
+           wv.visited_at,
+           wv.lat,
+           wv.lon
+         FROM waypoint_visits wv
+         INNER JOIN waypoints w ON w.id = wv.waypoint_id
+         INNER JOIN teams t ON t.id = wv.team_id
+         WHERE w.event_id = $1
+         ORDER BY wv.visited_at ASC, wv.id ASC`,
+        [event_id]
+      );
+
+      return result.rows.map((row) => ({
+        ...row,
+        lat: parseFloat(row.lat),
+        lon: parseFloat(row.lon),
+      }));
+    },
   },
 
   Mutation: {
@@ -195,8 +256,189 @@ export const resolvers = {
          RETURNING id, team, event, lat, lon, timestamp`,
         [team, event, lat, lon, timestamp || new Date().toISOString()]
       );
+
+      // Best-effort waypoint visit detection. Failures here should never block location ingestion.
+      try {
+        const eventResult = await query(
+          `SELECT id FROM events WHERE name = $1 LIMIT 1`,
+          [event]
+        );
+
+        if (eventResult.rows.length > 0) {
+          const eventId = eventResult.rows[0].id;
+          const teamResult = await query(
+            `SELECT id FROM teams WHERE name = $1 AND event_id = $2 LIMIT 1`,
+            [team, eventId]
+          );
+
+          if (teamResult.rows.length > 0) {
+            const teamId = teamResult.rows[0].id;
+            const waypointResult = await query(
+              `SELECT id, lat, lon
+               FROM waypoints
+               WHERE event_id = $1`,
+              [eventId]
+            );
+
+            if (waypointResult.rows.length > 0) {
+              const recentUpdatesResult = await query(
+                `SELECT lat, lon
+                 FROM location_updates
+                 WHERE team = $1
+                 ORDER BY timestamp DESC, id DESC
+                 LIMIT $2`,
+                [team, WAYPOINT_CONSECUTIVE_UPDATES_REQUIRED]
+              );
+
+              if (recentUpdatesResult.rows.length === WAYPOINT_CONSECUTIVE_UPDATES_REQUIRED) {
+                for (const waypoint of waypointResult.rows) {
+                  const waypointLat = parseFloat(waypoint.lat);
+                  const waypointLon = parseFloat(waypoint.lon);
+
+                  const latestDistance = haversineDistanceMeters(
+                    lat,
+                    lon,
+                    waypointLat,
+                    waypointLon
+                  );
+
+                  if (latestDistance > WAYPOINT_VISIT_RADIUS_METERS) {
+                    continue;
+                  }
+
+                  const allWithinRadius = recentUpdatesResult.rows.every((update) => {
+                    const updateLat = parseFloat(update.lat);
+                    const updateLon = parseFloat(update.lon);
+                    return (
+                      haversineDistanceMeters(updateLat, updateLon, waypointLat, waypointLon) <=
+                      WAYPOINT_VISIT_RADIUS_METERS
+                    );
+                  });
+
+                  if (!allWithinRadius) {
+                    continue;
+                  }
+
+                  await query(
+                    `INSERT INTO waypoint_visits (waypoint_id, team_id, visited_at, lat, lon)
+                     VALUES ($1, $2, $3, $4, $5)
+                     ON CONFLICT (waypoint_id, team_id) DO NOTHING`,
+                    [
+                      waypoint.id,
+                      teamId,
+                      timestamp || new Date().toISOString(),
+                      lat,
+                      lon,
+                    ]
+                  );
+                }
+              }
+            }
+          }
+        }
+      } catch (visitDetectionError) {
+        console.error('Waypoint visit detection error:', visitDetectionError.message);
+      }
       
       const row = result.rows[0];
+      return {
+        ...row,
+        lat: parseFloat(row.lat),
+        lon: parseFloat(row.lon),
+      };
+    },
+
+    // Create a waypoint (requires authentication)
+    createWaypoint: async (_, { event_id, keycode, name, lat, lon, is_required = false }) => {
+      const verifyResult = await query(
+        `SELECT id FROM events WHERE id = $1 AND keycode = $2`,
+        [event_id, keycode]
+      );
+
+      if (verifyResult.rows.length === 0) {
+        throw new Error('Invalid event ID or keycode');
+      }
+
+      const result = await query(
+        `INSERT INTO waypoints (event_id, name, lat, lon, is_required)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, event_id, name, lat, lon, is_required, created_at`,
+        [event_id, name, lat, lon, is_required]
+      );
+
+      const row = result.rows[0];
+      return {
+        ...row,
+        lat: parseFloat(row.lat),
+        lon: parseFloat(row.lon),
+      };
+    },
+
+    // Update a waypoint (requires authentication)
+    updateWaypoint: async (_, { waypoint_id, event_id, keycode, name, is_required }) => {
+      const verifyResult = await query(
+        `SELECT id FROM events WHERE id = $1 AND keycode = $2`,
+        [event_id, keycode]
+      );
+
+      if (verifyResult.rows.length === 0) {
+        throw new Error('Invalid event ID or keycode');
+      }
+
+      const waypointVerifyResult = await query(
+        `SELECT id, name, is_required
+         FROM waypoints
+         WHERE id = $1 AND event_id = $2`,
+        [waypoint_id, event_id]
+      );
+
+      if (waypointVerifyResult.rows.length === 0) {
+        throw new Error('Waypoint not found or does not belong to this event');
+      }
+
+      const currentWaypoint = waypointVerifyResult.rows[0];
+      const nextName = typeof name === 'string' ? name : currentWaypoint.name;
+      const nextRequired = typeof is_required === 'boolean' ? is_required : currentWaypoint.is_required;
+
+      const result = await query(
+        `UPDATE waypoints
+         SET name = $1, is_required = $2
+         WHERE id = $3
+         RETURNING id, event_id, name, lat, lon, is_required, created_at`,
+        [nextName, nextRequired, waypoint_id]
+      );
+
+      const row = result.rows[0];
+      return {
+        ...row,
+        lat: parseFloat(row.lat),
+        lon: parseFloat(row.lon),
+      };
+    },
+
+    // Delete a waypoint (requires authentication)
+    deleteWaypoint: async (_, { waypoint_id, event_id, keycode }) => {
+      const verifyResult = await query(
+        `SELECT id FROM events WHERE id = $1 AND keycode = $2`,
+        [event_id, keycode]
+      );
+
+      if (verifyResult.rows.length === 0) {
+        throw new Error('Invalid event ID or keycode');
+      }
+
+      const waypointResult = await query(
+        `DELETE FROM waypoints
+         WHERE id = $1 AND event_id = $2
+         RETURNING id, event_id, name, lat, lon, is_required, created_at`,
+        [waypoint_id, event_id]
+      );
+
+      if (waypointResult.rows.length === 0) {
+        throw new Error('Waypoint not found or does not belong to this event');
+      }
+
+      const row = waypointResult.rows[0];
       return {
         ...row,
         lat: parseFloat(row.lat),

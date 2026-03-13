@@ -39,6 +39,31 @@ export const typeDefs = `
     timestamp: String!
   }
 
+  # Waypoint - Checkpoint in an event
+  type Waypoint {
+    id: Int!
+    event_id: Int!
+    name: String!
+    lat: Float!
+    lon: Float!
+    is_required: Boolean!
+    created_at: String
+  }
+
+  # WaypointVisit - Team visit record for a waypoint
+  type WaypointVisit {
+    id: Int!
+    waypoint_id: Int!
+    team_id: Int!
+    team_name: String
+    team_color: String
+    waypoint_name: String
+    waypoint_is_required: Boolean
+    visited_at: String!
+    lat: Float!
+    lon: Float!
+  }
+
   # Login response
   type LoginResponse {
     success: Boolean!
@@ -90,6 +115,12 @@ export const typeDefs = `
     
     # Export event data (requires authentication)
     exportEventData(event_id: Int!, keycode: String!, startDate: String, endDate: String): ExportData!
+
+    # Get waypoints for an event
+    waypoints(event_id: Int!): [Waypoint!]!
+
+    # Get waypoint visits for an event
+    waypointVisits(event_id: Int!): [WaypointVisit!]!
   }
 
   # Mutations
@@ -173,6 +204,32 @@ export const typeDefs = `
       event_id: Int!
       keycode: String!
     ): Event!
+
+    # Create a waypoint (requires authentication)
+    createWaypoint(
+      event_id: Int!
+      keycode: String!
+      name: String!
+      lat: Float!
+      lon: Float!
+      is_required: Boolean
+    ): Waypoint!
+
+    # Update a waypoint (requires authentication)
+    updateWaypoint(
+      waypoint_id: Int!
+      event_id: Int!
+      keycode: String!
+      name: String
+      is_required: Boolean
+    ): Waypoint!
+
+    # Delete a waypoint (requires authentication)
+    deleteWaypoint(
+      waypoint_id: Int!
+      event_id: Int!
+      keycode: String!
+    ): Waypoint!
     
     # Cleanup expired data (internal/admin use)
     cleanupExpiredData(secret: String!): CleanupResult!

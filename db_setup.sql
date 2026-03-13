@@ -33,16 +33,44 @@ CREATE TABLE IF NOT EXISTS location_updates (
     timestamp TIMESTAMP NOT NULL
 );
 
+-- Waypoints table: stores event checkpoints
+CREATE TABLE IF NOT EXISTS waypoints (
+    id SERIAL PRIMARY KEY,
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    lat DECIMAL(10, 8) NOT NULL,
+    lon DECIMAL(11, 8) NOT NULL,
+    is_required BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Waypoint visits table: tracks first visit per team/waypoint
+CREATE TABLE IF NOT EXISTS waypoint_visits (
+    id SERIAL PRIMARY KEY,
+    waypoint_id INTEGER NOT NULL REFERENCES waypoints(id) ON DELETE CASCADE,
+    team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    visited_at TIMESTAMP NOT NULL,
+    lat DECIMAL(10, 8) NOT NULL,
+    lon DECIMAL(11, 8) NOT NULL,
+    UNIQUE (waypoint_id, team_id)
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_teams_event_id ON teams(event_id);
 CREATE INDEX IF NOT EXISTS idx_location_updates_team ON location_updates(team);
 CREATE INDEX IF NOT EXISTS idx_location_updates_timestamp ON location_updates(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_events_name_keycode ON events(name, keycode);
+CREATE INDEX IF NOT EXISTS idx_waypoints_event_id ON waypoints(event_id);
+CREATE INDEX IF NOT EXISTS idx_waypoint_visits_waypoint_id ON waypoint_visits(waypoint_id);
+CREATE INDEX IF NOT EXISTS idx_waypoint_visits_team_id ON waypoint_visits(team_id);
+CREATE INDEX IF NOT EXISTS idx_location_updates_team_timestamp ON location_updates(team, timestamp DESC);
 
 -- Comments
 COMMENT ON TABLE events IS 'Tracking events with authentication';
 COMMENT ON TABLE teams IS 'Teams participating in events';
 COMMENT ON TABLE location_updates IS 'Location updates from team devices';
+COMMENT ON TABLE waypoints IS 'Event waypoints with required/optional flag';
+COMMENT ON TABLE waypoint_visits IS 'First visit records for each team and waypoint';
 COMMENT ON COLUMN events.image_data IS 'Base64 encoded event image data';
 COMMENT ON COLUMN events.image_mime_type IS 'MIME type of event image (e.g., image/png, image/jpeg)';
 COMMENT ON COLUMN events.logo_data IS 'Base64 encoded organization logo data';
