@@ -8,6 +8,8 @@ export const typeDefs = `
     id: Int!
     name: String!
     keycode: String!
+    view_keycode: String!
+    access_level: String
     image_data: String
     image_mime_type: String
     logo_data: String
@@ -67,6 +69,7 @@ export const typeDefs = `
   # Login response
   type LoginResponse {
     success: Boolean!
+    access_level: String!
     event: Event!
     teams: [Team!]!
   }

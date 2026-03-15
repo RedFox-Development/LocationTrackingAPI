@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS events (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     keycode VARCHAR(255) NOT NULL,
+  view_keycode VARCHAR(255),
     image_data TEXT,
     image_mime_type VARCHAR(50),
     logo_data TEXT,
@@ -67,6 +68,7 @@ CREATE INDEX IF NOT EXISTS idx_teams_event_id ON teams(event_id);
 CREATE INDEX IF NOT EXISTS idx_location_updates_team ON location_updates(team);
 CREATE INDEX IF NOT EXISTS idx_location_updates_timestamp ON location_updates(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_events_name_keycode ON events(name, keycode);
+CREATE INDEX IF NOT EXISTS idx_events_name_view_keycode ON events(name, view_keycode);
 CREATE INDEX IF NOT EXISTS idx_events_expiration ON events(expiration_date);
 CREATE INDEX IF NOT EXISTS idx_teams_expiration ON teams(expiration_date);
 CREATE INDEX IF NOT EXISTS idx_waypoints_event_id ON waypoints(event_id);
@@ -76,6 +78,24 @@ CREATE INDEX IF NOT EXISTS idx_location_updates_team_timestamp ON location_updat
 
 -- Backward-compatible column migrations for existing databases
 ALTER TABLE events ADD COLUMN IF NOT EXISTS geofence_data TEXT;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS view_keycode VARCHAR(255);
+UPDATE events
+SET view_keycode = UPPER(SUBSTRING(MD5(RANDOM()::text || clock_timestamp()::text) FROM 1 FOR 8))
+WHERE view_keycode IS NULL OR view_keycode = '';
+UPDATE events
+SET view_keycode = UPPER(view_keycode)
+WHERE view_keycode <> UPPER(view_keycode);
+ALTER TABLE events ALTER COLUMN view_keycode SET NOT NULL;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'events_name_view_keycode_key'
+  ) THEN
+    ALTER TABLE events ADD CONSTRAINT events_name_view_keycode_key UNIQUE(name, view_keycode);
+  END IF;
+END $$;
 `;
 
 let initialized = false;

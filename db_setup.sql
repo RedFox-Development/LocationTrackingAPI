@@ -6,12 +6,14 @@ CREATE TABLE IF NOT EXISTS events (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     keycode VARCHAR(255) NOT NULL,
+    view_keycode VARCHAR(255) NOT NULL,
     image_data TEXT,
     image_mime_type VARCHAR(50),
     logo_data TEXT,
     logo_mime_type VARCHAR(50),
     geofence_data TEXT,
-    UNIQUE(name, keycode)
+    UNIQUE(name, keycode),
+    UNIQUE(name, view_keycode)
 );
 
 -- Teams table: stores teams participating in events
@@ -60,6 +62,7 @@ CREATE INDEX IF NOT EXISTS idx_teams_event_id ON teams(event_id);
 CREATE INDEX IF NOT EXISTS idx_location_updates_team ON location_updates(team);
 CREATE INDEX IF NOT EXISTS idx_location_updates_timestamp ON location_updates(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_events_name_keycode ON events(name, keycode);
+CREATE INDEX IF NOT EXISTS idx_events_name_view_keycode ON events(name, view_keycode);
 CREATE INDEX IF NOT EXISTS idx_waypoints_event_id ON waypoints(event_id);
 CREATE INDEX IF NOT EXISTS idx_waypoint_visits_waypoint_id ON waypoint_visits(waypoint_id);
 CREATE INDEX IF NOT EXISTS idx_waypoint_visits_team_id ON waypoint_visits(team_id);

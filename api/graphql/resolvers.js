@@ -80,7 +80,7 @@ export const resolvers = {
     // Get a specific event
     event: async (_, { id }) => {
       const result = await query(
-        `SELECT id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
+        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
          FROM events
          WHERE id = $1`,
         [id]
@@ -92,7 +92,7 @@ export const resolvers = {
     // Note: Does not return keycode for security
     eventByName: async (_, { event_name }) => {
       const result = await query(
-        `SELECT id, name, '' as keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
+        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
          FROM events
          WHERE name = $1`,
         [event_name]
@@ -102,19 +102,31 @@ export const resolvers = {
 
     // Login to an event
     login: async (_, { event_name, keycode }) => {
-      // Find event by name and keycode
+      const normalizedKeycode = String(keycode || '').trim().toUpperCase();
+
+      // Find event by name and either management or view-only keycode.
       const eventResult = await query(
-        `SELECT id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
+        `SELECT id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
          FROM events
-         WHERE name = $1 AND keycode = $2`,
-        [event_name, keycode]
+         WHERE name = $1 AND (UPPER(keycode) = $2 OR UPPER(view_keycode) = $2)`,
+        [event_name, normalizedKeycode]
       );
 
       if (eventResult.rows.length === 0) {
         throw new Error('Invalid event name or keycode');
       }
 
-      const event = eventResult.rows[0];
+      const eventRow = eventResult.rows[0];
+      const isManageAccess = String(eventRow.keycode || '').toUpperCase() === normalizedKeycode;
+      const accessLevel = isManageAccess ? 'manage' : 'view';
+
+      const event = {
+        ...eventRow,
+        // Never leak the manage keycode to view-only sessions.
+        keycode: isManageAccess ? eventRow.keycode : '',
+        view_keycode: eventRow.view_keycode,
+        access_level: accessLevel,
+      };
 
       // Get teams for this event
       const teamsResult = await query(
@@ -127,6 +139,7 @@ export const resolvers = {
 
       return {
         success: true,
+        access_level: accessLevel,
         event,
         teams: teamsResult.rows,
       };
@@ -136,7 +149,7 @@ export const resolvers = {
     exportEventData: async (_, { event_id, keycode, startDate, endDate }) => {
       // Authenticate
       const eventResult = await query(
-        `SELECT id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
+        `SELECT id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
          FROM events
          WHERE id = $1 AND keycode = $2`,
         [event_id, keycode]
@@ -271,15 +284,16 @@ export const resolvers = {
     // Create a new event
     createEvent: async (_, { name, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date }) => {
       const keycode = generateKeycode();
+      const viewKeycode = generateKeycode();
       
       const result = await query(
-        `INSERT INTO events (name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
-        [name, keycode, image_data || null, image_mime_type || null, logo_data || null, logo_mime_type || null, organization_name || null, expiration_date || null]
+        `INSERT INTO events (name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
+        [name, keycode, viewKeycode, image_data || null, image_mime_type || null, logo_data || null, logo_mime_type || null, organization_name || null, expiration_date || null]
       );
       
-      return result.rows[0];
+      return { ...result.rows[0], access_level: 'manage' };
     },
 
     // Create a new team
@@ -519,11 +533,11 @@ export const resolvers = {
         `UPDATE events 
          SET image_data = $1, image_mime_type = $2
          WHERE id = $3
-         RETURNING id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
         [image_data, image_mime_type, event_id]
       );
 
-      return result.rows[0];
+      return { ...result.rows[0], access_level: 'manage' };
     },
 
     // Update event logo (requires authentication)
@@ -543,11 +557,11 @@ export const resolvers = {
         `UPDATE events 
          SET logo_data = $1, logo_mime_type = $2
          WHERE id = $3
-         RETURNING id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
         [logo_data, logo_mime_type, event_id]
       );
 
-      return result.rows[0];
+      return { ...result.rows[0], access_level: 'manage' };
     },
 
     // Update organization name (requires authentication)
@@ -567,11 +581,11 @@ export const resolvers = {
         `UPDATE events 
          SET organization_name = $1
          WHERE id = $2
-         RETURNING id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
         [organization_name, event_id]
       );
 
-      return result.rows[0];
+      return { ...result.rows[0], access_level: 'manage' };
     },
 
     // Update team color (requires authentication via event)
@@ -668,11 +682,11 @@ export const resolvers = {
         `UPDATE events 
          SET geofence_data = $1
          WHERE id = $2
-         RETURNING id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
         [geofence_data, event_id]
       );
 
-      return result.rows[0];
+      return { ...result.rows[0], access_level: 'manage' };
     },
 
     // Delete event geofence (requires authentication)
@@ -692,11 +706,11 @@ export const resolvers = {
         `UPDATE events 
          SET geofence_data = NULL
          WHERE id = $1
-         RETURNING id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
         [event_id]
       );
 
-      return result.rows[0];
+      return { ...result.rows[0], access_level: 'manage' };
     },
 
     // Cleanup expired data (internal/admin use)
@@ -764,7 +778,7 @@ export const resolvers = {
   Team: {
     event: async (parent) => {
       const result = await query(
-        `SELECT id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
+        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
          FROM events
          WHERE id = $1`,
         [parent.event_id]

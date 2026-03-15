@@ -58,7 +58,7 @@ This keeps the service low-maintenance while enforcing retention limits for GDPR
 
 The API uses PostgreSQL with three main tables:
 
-- **events**: Tracking events (id, name, keycode, image_data, image_mime_type, logo_data, logo_mime_type)
+- **events**: Tracking events (id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type)
 - **teams**: Teams participating in events (id, event_id, name, color)
 - **location_updates**: Location updates from team devices (id, team, event, lat, lon, timestamp)
 
@@ -86,6 +86,8 @@ type Event {
   id: Int!
   name: String!
   keycode: String!
+  view_keycode: String!
+  access_level: String
   teams: [Team!]!
 }
 
@@ -113,11 +115,11 @@ type LocationUpdate {
 - `teams(event_id: Int!): [Team!]!` - Get all teams for an event
 - `updates(event: String!, team: String!, limit: Int): [LocationUpdate!]!` - Get location updates for a team in an event
 - `event(id: Int!): Event` - Get a specific event
-- `login(event_name: String!, keycode: String!): LoginResponse!` - Login to an event
+- `login(event_name: String!, keycode: String!): LoginResponse!` - Login to an event with either manage or view-only keycode
 
 ### Mutations
 
-- `createEvent(name: String!): Event!` - Create a new event (keycode auto-generated)
+- `createEvent(name: String!): Event!` - Create a new event (manage and view-only keycodes auto-generated)
 - `createTeam(event_id: Int!, name: String!, color: String): Team!` - Create a new team
 - `createLocationUpdate(team: String!, event: String!, lat: Float!, lon: Float!, timestamp: String): LocationUpdate!` - Submit a location update
 
