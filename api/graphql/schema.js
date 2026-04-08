@@ -32,6 +32,8 @@ export const typeDefs = `
     name: String!
     color: String!
     expiration_date: DateTime
+    access_start_date: DateTime
+    access_end_date: DateTime
     activated: Boolean!
     event: Event
     updates: [LocationUpdate!]!
@@ -42,6 +44,8 @@ export const typeDefs = `
     team_name: String!
     event_name: String!
     team_expiration_date: DateTime
+    team_access_start_date: DateTime
+    team_access_end_date: DateTime
     event_expiration_date: DateTime
     timezone: String
     start_date: String
@@ -225,6 +229,15 @@ export const typeDefs = `
       event_id: Int!
       keycode: String!
       expiration_date: DateTime
+    ): Team!
+
+    # Update team access window (requires authentication via event)
+    updateTeamAccessWindow(
+      team_id: Int!
+      event_id: Int!
+      keycode: String!
+      start_date: String
+      end_date: String
     ): Team!
 
     # Mark team activation status by team+event names (used by mobile setup)

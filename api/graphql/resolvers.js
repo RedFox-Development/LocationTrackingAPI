@@ -128,7 +128,7 @@ export const resolvers = {
     // Get teams for an event
     teams: async (_, { event_id }) => {
       const result = await query(
-        `SELECT id, event_id, name, color, expiration_date, activated
+        `SELECT id, event_id, name, color, expiration_date, access_start_date, access_end_date, activated
          FROM teams
          WHERE event_id = $1
          ORDER BY name ASC`,
@@ -185,6 +185,8 @@ export const resolvers = {
            t.name AS team_name,
            e.name AS event_name,
            t.expiration_date AS team_expiration_date,
+           t.access_start_date AS team_access_start_date,
+           t.access_end_date AS team_access_end_date,
            e.expiration_date AS event_expiration_date,
            e.timezone,
            e.start_date,
@@ -234,7 +236,7 @@ export const resolvers = {
 
       // Get teams for this event
       const teamsResult = await query(
-        `SELECT id, event_id, name, color, expiration_date, activated
+        `SELECT id, event_id, name, color, expiration_date, access_start_date, access_end_date, activated
          FROM teams
          WHERE event_id = $1
          ORDER BY name ASC`,
@@ -282,7 +284,7 @@ export const resolvers = {
 
       // Get teams for this event
       const teamsResult = await query(
-        `SELECT id, event_id, name, color, expiration_date, activated
+        `SELECT id, event_id, name, color, expiration_date, access_start_date, access_end_date, activated
          FROM teams
          WHERE event_id = $1
          ORDER BY name ASC`,
@@ -444,7 +446,7 @@ export const resolvers = {
       const result = await query(
         `INSERT INTO teams (event_id, name, color, expiration_date)
          VALUES ($1, $2, $3, $4)
-         RETURNING id, event_id, name, color, expiration_date, activated`,
+         RETURNING id, event_id, name, color, expiration_date, access_start_date, access_end_date, activated`,
         [event_id, name, color, normalizedExpiration]
       );
       
@@ -806,7 +808,7 @@ export const resolvers = {
         `UPDATE teams 
          SET color = $1
          WHERE id = $2
-         RETURNING id, event_id, name, color, expiration_date, activated`,
+         RETURNING id, event_id, name, color, expiration_date, access_start_date, access_end_date, activated`,
         [color, team_id]
       );
 
@@ -850,8 +852,42 @@ export const resolvers = {
         `UPDATE teams
          SET expiration_date = $1
          WHERE id = $2
-         RETURNING id, event_id, name, color, expiration_date, activated`,
+         RETURNING id, event_id, name, color, expiration_date, access_start_date, access_end_date, activated`,
         [normalizedExpiration, team_id]
+      );
+
+      return result.rows[0];
+    },
+
+    // Update team access window (requires authentication via event)
+    updateTeamAccessWindow: async (_, { team_id, event_id, keycode, start_date, end_date }) => {
+      const verifyResult = await query(
+        `SELECT id FROM events WHERE id = $1 AND keycode = $2`,
+        [event_id, keycode]
+      );
+
+      if (verifyResult.rows.length === 0) {
+        throw new Error('Invalid event ID or keycode');
+      }
+
+      const teamVerifyResult = await query(
+        `SELECT id FROM teams WHERE id = $1 AND event_id = $2`,
+        [team_id, event_id]
+      );
+
+      if (teamVerifyResult.rows.length === 0) {
+        throw new Error('Team not found or does not belong to this event');
+      }
+
+      validateWindowOrdering(start_date, end_date);
+
+      const result = await query(
+        `UPDATE teams
+         SET access_start_date = $1,
+             access_end_date = $2
+         WHERE id = $3
+         RETURNING id, event_id, name, color, expiration_date, access_start_date, access_end_date, activated`,
+        [start_date || null, end_date || null, team_id]
       );
 
       return result.rows[0];
@@ -864,7 +900,7 @@ export const resolvers = {
          SET activated = $3
          FROM events e
          WHERE t.event_id = e.id AND e.name = $1 AND t.name = $2
-         RETURNING t.id, t.event_id, t.name, t.color, t.expiration_date, t.activated`,
+         RETURNING t.id, t.event_id, t.name, t.color, t.expiration_date, t.access_start_date, t.access_end_date, t.activated`,
         [event_name, team_name, activated]
       );
 
@@ -952,7 +988,7 @@ export const resolvers = {
 
       // Verify team belongs to event
       const teamResult = await query(
-        `SELECT id, event_id, name, color, expiration_date, activated
+        `SELECT id, event_id, name, color, expiration_date, access_start_date, access_end_date, activated
          FROM teams
          WHERE id = $1 AND event_id = $2`,
         [team_id, event_id]
@@ -1081,7 +1117,7 @@ export const resolvers = {
   Event: {
     teams: async (parent) => {
       const result = await query(
-        `SELECT id, event_id, name, color, expiration_date, activated
+        `SELECT id, event_id, name, color, expiration_date, access_start_date, access_end_date, activated
          FROM teams
          WHERE event_id = $1
          ORDER BY name ASC`,

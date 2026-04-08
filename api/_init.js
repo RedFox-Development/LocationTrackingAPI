@@ -32,7 +32,10 @@ CREATE TABLE IF NOT EXISTS teams (
     name VARCHAR(255) NOT NULL,
     color VARCHAR(7) DEFAULT '#3B82F6',
     expiration_date TIMESTAMPTZ,
+    access_start_date TIMESTAMPTZ,
+    access_end_date TIMESTAMPTZ,
   activated BOOLEAN NOT NULL DEFAULT FALSE,
+    CHECK (access_start_date IS NULL OR access_end_date IS NULL OR access_start_date <= access_end_date),
     UNIQUE(event_id, name)
 );
 
@@ -77,6 +80,7 @@ CREATE INDEX IF NOT EXISTS idx_events_name_view_keycode ON events(name, view_key
 CREATE INDEX IF NOT EXISTS idx_events_expiration ON events(expiration_date);
 CREATE INDEX IF NOT EXISTS idx_events_timeframe ON events(start_date, end_date);
 CREATE INDEX IF NOT EXISTS idx_teams_expiration ON teams(expiration_date);
+CREATE INDEX IF NOT EXISTS idx_teams_access_window ON teams(access_start_date, access_end_date);
 CREATE INDEX IF NOT EXISTS idx_teams_activated ON teams(activated);
 CREATE INDEX IF NOT EXISTS idx_waypoints_event_id ON waypoints(event_id);
 CREATE INDEX IF NOT EXISTS idx_waypoint_visits_waypoint_id ON waypoint_visits(waypoint_id);
@@ -194,11 +198,26 @@ BEGIN
 END $$;
 
 ALTER TABLE teams ADD COLUMN IF NOT EXISTS activated BOOLEAN;
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS access_start_date TIMESTAMPTZ;
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS access_end_date TIMESTAMPTZ;
 UPDATE teams
 SET activated = FALSE
 WHERE activated IS NULL;
 ALTER TABLE teams ALTER COLUMN activated SET DEFAULT FALSE;
 ALTER TABLE teams ALTER COLUMN activated SET NOT NULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'teams_access_window_valid'
+  ) THEN
+    ALTER TABLE teams
+    ADD CONSTRAINT teams_access_window_valid
+    CHECK (access_start_date IS NULL OR access_end_date IS NULL OR access_start_date <= access_end_date);
+  END IF;
+END $$;
 
 UPDATE events
 SET view_keycode = UPPER(SUBSTRING(MD5(RANDOM()::text || clock_timestamp()::text) FROM 1 FOR 8))

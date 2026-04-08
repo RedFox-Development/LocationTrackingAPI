@@ -30,7 +30,10 @@ CREATE TABLE IF NOT EXISTS teams (
     name VARCHAR(255) NOT NULL,
     color VARCHAR(7) DEFAULT '#3B82F6',
     expiration_date TIMESTAMPTZ,
+    access_start_date TIMESTAMPTZ,
+    access_end_date TIMESTAMPTZ,
     activated BOOLEAN NOT NULL DEFAULT FALSE,
+    CHECK (access_start_date IS NULL OR access_end_date IS NULL OR access_start_date <= access_end_date),
     UNIQUE(event_id, name)
 );
 
@@ -75,6 +78,7 @@ CREATE INDEX IF NOT EXISTS idx_events_name_view_keycode ON events(name, view_key
 CREATE INDEX IF NOT EXISTS idx_events_expiration ON events(expiration_date);
 CREATE INDEX IF NOT EXISTS idx_events_timeframe ON events(start_date, end_date);
 CREATE INDEX IF NOT EXISTS idx_teams_expiration ON teams(expiration_date);
+CREATE INDEX IF NOT EXISTS idx_teams_access_window ON teams(access_start_date, access_end_date);
 CREATE INDEX IF NOT EXISTS idx_teams_activated ON teams(activated);
 CREATE INDEX IF NOT EXISTS idx_waypoints_event_id ON waypoints(event_id);
 CREATE INDEX IF NOT EXISTS idx_waypoint_visits_waypoint_id ON waypoint_visits(waypoint_id);
