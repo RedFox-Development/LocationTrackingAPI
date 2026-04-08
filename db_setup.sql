@@ -12,8 +12,14 @@ CREATE TABLE IF NOT EXISTS events (
     logo_data TEXT,
     logo_mime_type VARCHAR(50),
     geofence_data TEXT,
+    organization_name VARCHAR(255),
+    expiration_date DATE,
+    timezone VARCHAR(100) NOT NULL DEFAULT 'UTC',
+    start_date TIMESTAMP,
+    end_date TIMESTAMP,
     UNIQUE(name, keycode),
-    UNIQUE(name, view_keycode)
+    UNIQUE(name, view_keycode),
+    CHECK (start_date IS NULL OR end_date IS NULL OR start_date <= end_date)
 );
 
 -- Teams table: stores teams participating in events
@@ -22,6 +28,8 @@ CREATE TABLE IF NOT EXISTS teams (
     event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     color VARCHAR(7) DEFAULT '#3B82F6',
+    expiration_date DATE,
+    activated BOOLEAN NOT NULL DEFAULT FALSE,
     UNIQUE(event_id, name)
 );
 
@@ -63,6 +71,10 @@ CREATE INDEX IF NOT EXISTS idx_location_updates_team ON location_updates(team);
 CREATE INDEX IF NOT EXISTS idx_location_updates_timestamp ON location_updates(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_events_name_keycode ON events(name, keycode);
 CREATE INDEX IF NOT EXISTS idx_events_name_view_keycode ON events(name, view_keycode);
+CREATE INDEX IF NOT EXISTS idx_events_expiration ON events(expiration_date);
+CREATE INDEX IF NOT EXISTS idx_events_timeframe ON events(start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_teams_expiration ON teams(expiration_date);
+CREATE INDEX IF NOT EXISTS idx_teams_activated ON teams(activated);
 CREATE INDEX IF NOT EXISTS idx_waypoints_event_id ON waypoints(event_id);
 CREATE INDEX IF NOT EXISTS idx_waypoint_visits_waypoint_id ON waypoint_visits(waypoint_id);
 CREATE INDEX IF NOT EXISTS idx_waypoint_visits_team_id ON waypoint_visits(team_id);
@@ -79,3 +91,7 @@ COMMENT ON COLUMN events.image_mime_type IS 'MIME type of event image (e.g., ima
 COMMENT ON COLUMN events.logo_data IS 'Base64 encoded organization logo data';
 COMMENT ON COLUMN events.logo_mime_type IS 'MIME type of logo (e.g., image/png, image/jpeg)';
 COMMENT ON COLUMN events.geofence_data IS 'Geofence polygon coordinates as JSON array of [lat, lon] pairs';
+COMMENT ON COLUMN events.timezone IS 'IANA timezone identifier used by clients';
+COMMENT ON COLUMN events.start_date IS 'Optional event access window start timestamp';
+COMMENT ON COLUMN events.end_date IS 'Optional event access window end timestamp';
+COMMENT ON COLUMN teams.activated IS 'Set true after mobile setup succeeds';

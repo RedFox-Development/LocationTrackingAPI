@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS events (
   geofence_data TEXT,
     organization_name VARCHAR(255),
     expiration_date DATE,
+    timezone VARCHAR(100) NOT NULL DEFAULT 'UTC',
+    start_date TIMESTAMP,
+    end_date TIMESTAMP,
     UNIQUE(name, keycode)
 );
 
@@ -28,6 +31,7 @@ CREATE TABLE IF NOT EXISTS teams (
     name VARCHAR(255) NOT NULL,
     color VARCHAR(7) DEFAULT '#3B82F6',
     expiration_date DATE,
+  activated BOOLEAN NOT NULL DEFAULT FALSE,
     UNIQUE(event_id, name)
 );
 
@@ -70,7 +74,9 @@ CREATE INDEX IF NOT EXISTS idx_location_updates_timestamp ON location_updates(ti
 CREATE INDEX IF NOT EXISTS idx_events_name_keycode ON events(name, keycode);
 CREATE INDEX IF NOT EXISTS idx_events_name_view_keycode ON events(name, view_keycode);
 CREATE INDEX IF NOT EXISTS idx_events_expiration ON events(expiration_date);
+CREATE INDEX IF NOT EXISTS idx_events_timeframe ON events(start_date, end_date);
 CREATE INDEX IF NOT EXISTS idx_teams_expiration ON teams(expiration_date);
+CREATE INDEX IF NOT EXISTS idx_teams_activated ON teams(activated);
 CREATE INDEX IF NOT EXISTS idx_waypoints_event_id ON waypoints(event_id);
 CREATE INDEX IF NOT EXISTS idx_waypoint_visits_waypoint_id ON waypoint_visits(waypoint_id);
 CREATE INDEX IF NOT EXISTS idx_waypoint_visits_team_id ON waypoint_visits(team_id);
@@ -79,6 +85,35 @@ CREATE INDEX IF NOT EXISTS idx_location_updates_team_timestamp ON location_updat
 -- Backward-compatible column migrations for existing databases
 ALTER TABLE events ADD COLUMN IF NOT EXISTS geofence_data TEXT;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS view_keycode VARCHAR(255);
+ALTER TABLE events ADD COLUMN IF NOT EXISTS timezone VARCHAR(100);
+ALTER TABLE events ADD COLUMN IF NOT EXISTS start_date TIMESTAMP;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS end_date TIMESTAMP;
+UPDATE events
+SET timezone = 'UTC'
+WHERE timezone IS NULL OR timezone = '';
+ALTER TABLE events ALTER COLUMN timezone SET DEFAULT 'UTC';
+ALTER TABLE events ALTER COLUMN timezone SET NOT NULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'events_timeframe_valid'
+  ) THEN
+    ALTER TABLE events
+    ADD CONSTRAINT events_timeframe_valid
+    CHECK (start_date IS NULL OR end_date IS NULL OR start_date <= end_date);
+  END IF;
+END $$;
+
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS activated BOOLEAN;
+UPDATE teams
+SET activated = FALSE
+WHERE activated IS NULL;
+ALTER TABLE teams ALTER COLUMN activated SET DEFAULT FALSE;
+ALTER TABLE teams ALTER COLUMN activated SET NOT NULL;
+
 UPDATE events
 SET view_keycode = UPPER(SUBSTRING(MD5(RANDOM()::text || clock_timestamp()::text) FROM 1 FOR 8))
 WHERE view_keycode IS NULL OR view_keycode = '';

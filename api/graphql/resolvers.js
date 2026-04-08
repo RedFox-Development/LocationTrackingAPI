@@ -45,12 +45,34 @@ function haversineDistanceMeters(lat1, lon1, lat2, lon2) {
   return earthRadiusMeters * c;
 }
 
+function toDateOnlyMs(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function validateWindowOrdering(startDate, endDate) {
+  if (!startDate || !endDate) {
+    return;
+  }
+
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    throw new Error('Invalid timeframe date format');
+  }
+  if (start > end) {
+    throw new Error('Timeframe start_date must be earlier than or equal to end_date');
+  }
+}
+
 export const resolvers = {
   Query: {
     // Get teams for an event
     teams: async (_, { event_id }) => {
       const result = await query(
-        `SELECT id, event_id, name, color, expiration_date
+        `SELECT id, event_id, name, color, expiration_date, activated
          FROM teams
          WHERE event_id = $1
          ORDER BY name ASC`,
@@ -80,7 +102,7 @@ export const resolvers = {
     // Get a specific event
     event: async (_, { id }) => {
       const result = await query(
-        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
+        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data
          FROM events
          WHERE id = $1`,
         [id]
@@ -92,11 +114,37 @@ export const resolvers = {
     // Note: Does not return keycode for security
     eventByName: async (_, { event_name }) => {
       const result = await query(
-        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
+        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data
          FROM events
          WHERE name = $1`,
         [event_name]
       );
+      return result.rows[0] || null;
+    },
+
+    // Get setup configuration for mobile app by team and event names
+    teamSetupConfig: async (_, { event_name, team_name }) => {
+      const result = await query(
+        `SELECT
+           t.name AS team_name,
+           e.name AS event_name,
+           t.expiration_date AS team_expiration_date,
+           e.expiration_date AS event_expiration_date,
+           e.timezone,
+           e.start_date,
+           e.end_date,
+           e.image_data,
+           e.image_mime_type,
+           e.logo_data,
+           e.logo_mime_type,
+           e.organization_name
+         FROM teams t
+         INNER JOIN events e ON e.id = t.event_id
+         WHERE e.name = $1 AND t.name = $2
+         LIMIT 1`,
+        [event_name, team_name]
+      );
+
       return result.rows[0] || null;
     },
 
@@ -106,7 +154,7 @@ export const resolvers = {
 
       // Find event by name and either management or view-only keycode.
       const eventResult = await query(
-        `SELECT id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
+        `SELECT id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data
          FROM events
          WHERE name = $1 AND (UPPER(keycode) = $2 OR UPPER(view_keycode) = $2)`,
         [event_name, normalizedKeycode]
@@ -130,7 +178,7 @@ export const resolvers = {
 
       // Get teams for this event
       const teamsResult = await query(
-        `SELECT id, event_id, name, color, expiration_date
+        `SELECT id, event_id, name, color, expiration_date, activated
          FROM teams
          WHERE event_id = $1
          ORDER BY name ASC`,
@@ -149,7 +197,7 @@ export const resolvers = {
     exportEventData: async (_, { event_id, keycode, startDate, endDate }) => {
       // Authenticate
       const eventResult = await query(
-        `SELECT id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
+        `SELECT id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data
          FROM events
          WHERE id = $1 AND keycode = $2`,
         [event_id, keycode]
@@ -178,7 +226,7 @@ export const resolvers = {
 
       // Get teams for this event
       const teamsResult = await query(
-        `SELECT id, event_id, name, color, expiration_date
+        `SELECT id, event_id, name, color, expiration_date, activated
          FROM teams
          WHERE event_id = $1
          ORDER BY name ASC`,
@@ -282,15 +330,16 @@ export const resolvers = {
 
   Mutation: {
     // Create a new event
-    createEvent: async (_, { name, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date }) => {
+    createEvent: async (_, { name, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date }) => {
+      validateWindowOrdering(start_date, end_date);
       const keycode = generateKeycode();
       const viewKeycode = generateKeycode();
       
       const result = await query(
-        `INSERT INTO events (name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
-        [name, keycode, viewKeycode, image_data || null, image_mime_type || null, logo_data || null, logo_mime_type || null, organization_name || null, expiration_date || null]
+        `INSERT INTO events (name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data`,
+        [name, keycode, viewKeycode, image_data || null, image_mime_type || null, logo_data || null, logo_mime_type || null, organization_name || null, expiration_date || null, timezone || 'UTC', start_date || null, end_date || null]
       );
       
       return { ...result.rows[0], access_level: 'manage' };
@@ -298,10 +347,31 @@ export const resolvers = {
 
     // Create a new team
     createTeam: async (_, { event_id, name, color = '#3B82F6', expiration_date }) => {
+      if (expiration_date) {
+        const eventResult = await query(
+          `SELECT expiration_date FROM events WHERE id = $1`,
+          [event_id]
+        );
+
+        if (eventResult.rows.length === 0) {
+          throw new Error('Event not found');
+        }
+
+        const eventExpirationMs = toDateOnlyMs(eventResult.rows[0].expiration_date);
+        const teamExpirationMs = toDateOnlyMs(expiration_date);
+        if (
+          eventExpirationMs != null &&
+          teamExpirationMs != null &&
+          teamExpirationMs > eventExpirationMs
+        ) {
+          throw new Error('Team expiration_date cannot be later than event expiration_date');
+        }
+      }
+
       const result = await query(
         `INSERT INTO teams (event_id, name, color, expiration_date)
          VALUES ($1, $2, $3, $4)
-         RETURNING id, event_id, name, color, expiration_date`,
+         RETURNING id, event_id, name, color, expiration_date, activated`,
         [event_id, name, color, expiration_date || null]
       );
       
@@ -310,6 +380,55 @@ export const resolvers = {
 
     // Create a location update
     createLocationUpdate: async (_, { team, event, lat, lon, timestamp }) => {
+      const eventResult = await query(
+        `SELECT id, expiration_date, start_date, end_date
+         FROM events
+         WHERE name = $1
+         LIMIT 1`,
+        [event]
+      );
+
+      if (eventResult.rows.length === 0) {
+        throw new Error('Event not found');
+      }
+
+      const eventRow = eventResult.rows[0];
+      const now = new Date();
+      const nowMs = now.getTime();
+      const startMs = eventRow.start_date ? new Date(eventRow.start_date).getTime() : null;
+      const endMs = eventRow.end_date ? new Date(eventRow.end_date).getTime() : null;
+
+      if (startMs != null && !Number.isNaN(startMs) && nowMs < startMs) {
+        throw new Error('Event access window has not started yet');
+      }
+
+      if (endMs != null && !Number.isNaN(endMs) && nowMs > endMs) {
+        throw new Error('Event access window has ended');
+      }
+
+      const eventExpirationMs = toDateOnlyMs(eventRow.expiration_date);
+      const nowDateMs = toDateOnlyMs(now);
+      if (eventExpirationMs != null && nowDateMs != null && nowDateMs > eventExpirationMs) {
+        throw new Error('Event is expired');
+      }
+
+      const teamResult = await query(
+        `SELECT expiration_date
+         FROM teams
+         WHERE name = $1 AND event_id = $2
+         LIMIT 1`,
+        [team, eventRow.id]
+      );
+
+      if (teamResult.rows.length === 0) {
+        throw new Error('Team not found for this event');
+      }
+
+      const teamExpirationMs = toDateOnlyMs(teamResult.rows[0].expiration_date);
+      if (teamExpirationMs != null && nowDateMs != null && nowDateMs > teamExpirationMs) {
+        throw new Error('Team is expired');
+      }
+
       const result = await query(
         `INSERT INTO location_updates (team, event, lat, lon, timestamp)
          VALUES ($1, $2, $3, $4, $5)
@@ -533,7 +652,7 @@ export const resolvers = {
         `UPDATE events 
          SET image_data = $1, image_mime_type = $2
          WHERE id = $3
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data`,
         [image_data, image_mime_type, event_id]
       );
 
@@ -557,7 +676,7 @@ export const resolvers = {
         `UPDATE events 
          SET logo_data = $1, logo_mime_type = $2
          WHERE id = $3
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data`,
         [logo_data, logo_mime_type, event_id]
       );
 
@@ -581,7 +700,7 @@ export const resolvers = {
         `UPDATE events 
          SET organization_name = $1
          WHERE id = $2
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data`,
         [organization_name, event_id]
       );
 
@@ -615,11 +734,130 @@ export const resolvers = {
         `UPDATE teams 
          SET color = $1
          WHERE id = $2
-         RETURNING id, event_id, name, color, expiration_date`,
+         RETURNING id, event_id, name, color, expiration_date, activated`,
         [color, team_id]
       );
 
       return result.rows[0];
+    },
+
+    // Update team expiration (requires authentication via event)
+    updateTeamExpiration: async (_, { team_id, event_id, keycode, expiration_date }) => {
+      const verifyResult = await query(
+        `SELECT id, expiration_date FROM events WHERE id = $1 AND keycode = $2`,
+        [event_id, keycode]
+      );
+
+      if (verifyResult.rows.length === 0) {
+        throw new Error('Invalid event ID or keycode');
+      }
+
+      const eventExpirationMs = toDateOnlyMs(verifyResult.rows[0].expiration_date);
+      const teamExpirationMs = toDateOnlyMs(expiration_date);
+      if (
+        expiration_date &&
+        eventExpirationMs != null &&
+        teamExpirationMs != null &&
+        teamExpirationMs > eventExpirationMs
+      ) {
+        throw new Error('Team expiration_date cannot be later than event expiration_date');
+      }
+
+      const teamVerifyResult = await query(
+        `SELECT id FROM teams WHERE id = $1 AND event_id = $2`,
+        [team_id, event_id]
+      );
+
+      if (teamVerifyResult.rows.length === 0) {
+        throw new Error('Team not found or does not belong to this event');
+      }
+
+      const result = await query(
+        `UPDATE teams
+         SET expiration_date = $1
+         WHERE id = $2
+         RETURNING id, event_id, name, color, expiration_date, activated`,
+        [expiration_date || null, team_id]
+      );
+
+      return result.rows[0];
+    },
+
+    // Set team activation status after mobile setup
+    setTeamActivated: async (_, { team_name, event_name, activated = true }) => {
+      const result = await query(
+        `UPDATE teams t
+         SET activated = $3
+         FROM events e
+         WHERE t.event_id = e.id AND e.name = $1 AND t.name = $2
+         RETURNING t.id, t.event_id, t.name, t.color, t.expiration_date, t.activated`,
+        [event_name, team_name, activated]
+      );
+
+      if (result.rows.length === 0) {
+        throw new Error('Team not found for event');
+      }
+
+      return result.rows[0];
+    },
+
+    // Update event deadline (requires authentication)
+    updateEventDeadline: async (_, { event_id, keycode, expiration_date }) => {
+      const verifyResult = await query(
+        `SELECT id, start_date, end_date FROM events WHERE id = $1 AND keycode = $2`,
+        [event_id, keycode]
+      );
+
+      if (verifyResult.rows.length === 0) {
+        throw new Error('Invalid event ID or keycode');
+      }
+
+      const existing = verifyResult.rows[0];
+      const endDateMs = toDateOnlyMs(existing.end_date);
+      const deadlineMs = toDateOnlyMs(expiration_date);
+      if (deadlineMs != null && endDateMs != null && endDateMs > deadlineMs) {
+        throw new Error('Event end_date cannot be later than expiration_date');
+      }
+
+      const result = await query(
+        `UPDATE events
+         SET expiration_date = $1
+         WHERE id = $2
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data`,
+        [expiration_date || null, event_id]
+      );
+
+      return { ...result.rows[0], access_level: 'manage' };
+    },
+
+    // Update event access timeframe (requires authentication)
+    updateEventTimeframe: async (_, { event_id, keycode, start_date, end_date }) => {
+      const verifyResult = await query(
+        `SELECT id, expiration_date FROM events WHERE id = $1 AND keycode = $2`,
+        [event_id, keycode]
+      );
+
+      if (verifyResult.rows.length === 0) {
+        throw new Error('Invalid event ID or keycode');
+      }
+
+      validateWindowOrdering(start_date, end_date);
+
+      const eventExpirationMs = toDateOnlyMs(verifyResult.rows[0].expiration_date);
+      const endDateMs = toDateOnlyMs(end_date);
+      if (eventExpirationMs != null && endDateMs != null && endDateMs > eventExpirationMs) {
+        throw new Error('Event end_date cannot be later than expiration_date');
+      }
+
+      const result = await query(
+        `UPDATE events
+         SET start_date = $1, end_date = $2
+         WHERE id = $3
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data`,
+        [start_date || null, end_date || null, event_id]
+      );
+
+      return { ...result.rows[0], access_level: 'manage' };
     },
 
     // Delete team (requires authentication via event)
@@ -636,7 +874,7 @@ export const resolvers = {
 
       // Verify team belongs to event
       const teamResult = await query(
-        `SELECT id, event_id, name, color, expiration_date
+        `SELECT id, event_id, name, color, expiration_date, activated
          FROM teams
          WHERE id = $1 AND event_id = $2`,
         [team_id, event_id]
@@ -682,7 +920,7 @@ export const resolvers = {
         `UPDATE events 
          SET geofence_data = $1
          WHERE id = $2
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data`,
         [geofence_data, event_id]
       );
 
@@ -706,7 +944,7 @@ export const resolvers = {
         `UPDATE events 
          SET geofence_data = NULL
          WHERE id = $1
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data`,
         [event_id]
       );
 
@@ -765,7 +1003,7 @@ export const resolvers = {
   Event: {
     teams: async (parent) => {
       const result = await query(
-        `SELECT id, event_id, name, color, expiration_date
+        `SELECT id, event_id, name, color, expiration_date, activated
          FROM teams
          WHERE event_id = $1
          ORDER BY name ASC`,
@@ -778,7 +1016,7 @@ export const resolvers = {
   Team: {
     event: async (parent) => {
       const result = await query(
-        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, geofence_data
+        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data
          FROM events
          WHERE id = $1`,
         [parent.event_id]

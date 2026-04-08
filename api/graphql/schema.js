@@ -16,6 +16,9 @@ export const typeDefs = `
     logo_mime_type: String
     organization_name: String
     expiration_date: String
+    timezone: String
+    start_date: String
+    end_date: String
     geofence_data: String
     teams: [Team!]!
   }
@@ -27,8 +30,25 @@ export const typeDefs = `
     name: String!
     color: String!
     expiration_date: String
+    activated: Boolean!
     event: Event
     updates: [LocationUpdate!]!
+  }
+
+  # Setup metadata consumed by mobile app after scanning QR
+  type TeamSetupConfig {
+    team_name: String!
+    event_name: String!
+    team_expiration_date: String
+    event_expiration_date: String
+    timezone: String
+    start_date: String
+    end_date: String
+    image_data: String
+    image_mime_type: String
+    logo_data: String
+    logo_mime_type: String
+    organization_name: String
   }
 
   # LocationUpdate - Location update from a team
@@ -115,6 +135,9 @@ export const typeDefs = `
     
     # Get public event data by name (images only, no keycode)
     eventByName(event_name: String!): Event
+
+    # Get team + event setup metadata by names (for mobile setup)
+    teamSetupConfig(event_name: String!, team_name: String!): TeamSetupConfig
     
     # Login to an event
     login(event_name: String!, keycode: String!): LoginResponse!
@@ -141,6 +164,9 @@ export const typeDefs = `
       logo_data: String
       logo_mime_type: String
       expiration_date: String
+      timezone: String
+      start_date: String
+      end_date: String
     ): Event!
     
     # Create a new team
@@ -190,6 +216,36 @@ export const typeDefs = `
       keycode: String!
       color: String!
     ): Team!
+
+    # Update team expiration (requires authentication via event)
+    updateTeamExpiration(
+      team_id: Int!
+      event_id: Int!
+      keycode: String!
+      expiration_date: String
+    ): Team!
+
+    # Mark team activation status by team+event names (used by mobile setup)
+    setTeamActivated(
+      team_name: String!
+      event_name: String!
+      activated: Boolean
+    ): Team!
+
+    # Update event deadline (requires authentication)
+    updateEventDeadline(
+      event_id: Int!
+      keycode: String!
+      expiration_date: String
+    ): Event!
+
+    # Update event access timeframe (requires authentication)
+    updateEventTimeframe(
+      event_id: Int!
+      keycode: String!
+      start_date: String
+      end_date: String
+    ): Event!
 
     # Delete team (requires authentication via event)
     deleteTeam(
