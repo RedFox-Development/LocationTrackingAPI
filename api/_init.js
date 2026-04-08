@@ -17,10 +17,11 @@ CREATE TABLE IF NOT EXISTS events (
     logo_mime_type VARCHAR(50),
   geofence_data TEXT,
     organization_name VARCHAR(255),
-    expiration_date DATE,
+    expiration_date TIMESTAMPTZ,
     timezone VARCHAR(100) NOT NULL DEFAULT 'UTC',
-    start_date TIMESTAMP,
-    end_date TIMESTAMP,
+    start_date TIMESTAMPTZ,
+    end_date TIMESTAMPTZ,
+    CHECK (expiration_date IS NULL OR end_date IS NULL OR end_date <= expiration_date),
     UNIQUE(name, keycode)
 );
 
@@ -30,7 +31,7 @@ CREATE TABLE IF NOT EXISTS teams (
     event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     color VARCHAR(7) DEFAULT '#3B82F6',
-    expiration_date DATE,
+    expiration_date TIMESTAMPTZ,
   activated BOOLEAN NOT NULL DEFAULT FALSE,
     UNIQUE(event_id, name)
 );
@@ -85,9 +86,81 @@ CREATE INDEX IF NOT EXISTS idx_location_updates_team_timestamp ON location_updat
 -- Backward-compatible column migrations for existing databases
 ALTER TABLE events ADD COLUMN IF NOT EXISTS geofence_data TEXT;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS view_keycode VARCHAR(255);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'events'
+      AND column_name = 'expiration_date'
+      AND data_type = 'date'
+  ) THEN
+    ALTER TABLE events
+    ALTER COLUMN expiration_date TYPE TIMESTAMPTZ
+    USING CASE
+      WHEN expiration_date IS NULL THEN NULL
+      ELSE (expiration_date::timestamp + time '23:59:59') AT TIME ZONE 'UTC'
+    END;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'teams'
+      AND column_name = 'expiration_date'
+      AND data_type = 'date'
+  ) THEN
+    ALTER TABLE teams
+    ALTER COLUMN expiration_date TYPE TIMESTAMPTZ
+    USING CASE
+      WHEN expiration_date IS NULL THEN NULL
+      ELSE (expiration_date::timestamp + time '23:59:59') AT TIME ZONE 'UTC'
+    END;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'events'
+      AND column_name = 'start_date'
+      AND data_type = 'timestamp without time zone'
+  ) THEN
+    ALTER TABLE events
+    ALTER COLUMN start_date TYPE TIMESTAMPTZ
+    USING CASE
+      WHEN start_date IS NULL THEN NULL
+      ELSE start_date AT TIME ZONE 'UTC'
+    END;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'events'
+      AND column_name = 'end_date'
+      AND data_type = 'timestamp without time zone'
+  ) THEN
+    ALTER TABLE events
+    ALTER COLUMN end_date TYPE TIMESTAMPTZ
+    USING CASE
+      WHEN end_date IS NULL THEN NULL
+      ELSE end_date AT TIME ZONE 'UTC'
+    END;
+  END IF;
+END $$;
+
 ALTER TABLE events ADD COLUMN IF NOT EXISTS timezone VARCHAR(100);
-ALTER TABLE events ADD COLUMN IF NOT EXISTS start_date TIMESTAMP;
-ALTER TABLE events ADD COLUMN IF NOT EXISTS end_date TIMESTAMP;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS end_date TIMESTAMPTZ;
 UPDATE events
 SET timezone = 'UTC'
 WHERE timezone IS NULL OR timezone = '';
@@ -104,6 +177,19 @@ BEGIN
     ALTER TABLE events
     ADD CONSTRAINT events_timeframe_valid
     CHECK (start_date IS NULL OR end_date IS NULL OR start_date <= end_date);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'events_end_not_after_expiration'
+  ) THEN
+    ALTER TABLE events
+    ADD CONSTRAINT events_end_not_after_expiration
+    CHECK (expiration_date IS NULL OR end_date IS NULL OR end_date <= expiration_date);
   END IF;
 END $$;
 

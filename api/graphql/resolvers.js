@@ -4,6 +4,7 @@
 
 import { query } from '../_db.js';
 import { generateKeycode } from '../_utils.js';
+import { GraphQLScalarType, Kind } from 'graphql';
 
 const WAYPOINT_VISIT_RADIUS_METERS = 15;
 const WAYPOINT_CONSECUTIVE_UPDATES_REQUIRED = 4;
@@ -45,11 +46,49 @@ function haversineDistanceMeters(lat1, lon1, lat2, lon2) {
   return earthRadiusMeters * c;
 }
 
-function toDateOnlyMs(value) {
+function toTimestampMs(value) {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  return date.getTime();
+}
+
+function normalizeExpirationToEndOfDayUtc(value) {
+  if (value == null || value === '') {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error('Invalid expiration_date format');
+  }
+
+  return new Date(
+    Date.UTC(
+      parsed.getUTCFullYear(),
+      parsed.getUTCMonth(),
+      parsed.getUTCDate(),
+      23,
+      59,
+      59,
+      0,
+    )
+  ).toISOString();
+}
+
+function defaultTimeframeEndFromExpiration(expirationIso) {
+  if (!expirationIso) {
+    return null;
+  }
+
+  const expiration = new Date(expirationIso);
+  if (Number.isNaN(expiration.getTime())) {
+    return null;
+  }
+
+  const result = new Date(expiration);
+  result.setUTCDate(result.getUTCDate() - 7);
+  return result.toISOString();
 }
 
 function validateWindowOrdering(startDate, endDate) {
@@ -68,6 +107,23 @@ function validateWindowOrdering(startDate, endDate) {
 }
 
 export const resolvers = {
+  DateTime: new GraphQLScalarType({
+    name: 'DateTime',
+    description: 'ISO-8601 timestamp string',
+    serialize(value) {
+      return toIsoDateTime(value);
+    },
+    parseValue(value) {
+      return toIsoDateTime(value);
+    },
+    parseLiteral(ast) {
+      if (ast.kind !== Kind.STRING) {
+        return null;
+      }
+      return toIsoDateTime(ast.value);
+    },
+  }),
+
   Query: {
     // Get teams for an event
     teams: async (_, { event_id }) => {
@@ -331,7 +387,22 @@ export const resolvers = {
   Mutation: {
     // Create a new event
     createEvent: async (_, { name, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date }) => {
-      validateWindowOrdering(start_date, end_date);
+      const normalizedExpiration = normalizeExpirationToEndOfDayUtc(expiration_date);
+      const defaultEndDate = defaultTimeframeEndFromExpiration(normalizedExpiration);
+      const resolvedEndDate = end_date || defaultEndDate;
+
+      validateWindowOrdering(start_date, resolvedEndDate);
+
+      const resolvedEndMs = toTimestampMs(resolvedEndDate);
+      const expirationMs = toTimestampMs(normalizedExpiration);
+      if (
+        resolvedEndMs != null &&
+        expirationMs != null &&
+        resolvedEndMs > expirationMs
+      ) {
+        throw new Error('Event end_date cannot be later than expiration_date');
+      }
+
       const keycode = generateKeycode();
       const viewKeycode = generateKeycode();
       
@@ -339,7 +410,7 @@ export const resolvers = {
         `INSERT INTO events (name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data`,
-        [name, keycode, viewKeycode, image_data || null, image_mime_type || null, logo_data || null, logo_mime_type || null, organization_name || null, expiration_date || null, timezone || 'UTC', start_date || null, end_date || null]
+        [name, keycode, viewKeycode, image_data || null, image_mime_type || null, logo_data || null, logo_mime_type || null, organization_name || null, normalizedExpiration, timezone || 'UTC', start_date || null, resolvedEndDate || null]
       );
       
       return { ...result.rows[0], access_level: 'manage' };
@@ -347,6 +418,8 @@ export const resolvers = {
 
     // Create a new team
     createTeam: async (_, { event_id, name, color = '#3B82F6', expiration_date }) => {
+      const normalizedExpiration = normalizeExpirationToEndOfDayUtc(expiration_date);
+
       if (expiration_date) {
         const eventResult = await query(
           `SELECT expiration_date FROM events WHERE id = $1`,
@@ -357,8 +430,8 @@ export const resolvers = {
           throw new Error('Event not found');
         }
 
-        const eventExpirationMs = toDateOnlyMs(eventResult.rows[0].expiration_date);
-        const teamExpirationMs = toDateOnlyMs(expiration_date);
+        const eventExpirationMs = toTimestampMs(eventResult.rows[0].expiration_date);
+        const teamExpirationMs = toTimestampMs(normalizedExpiration);
         if (
           eventExpirationMs != null &&
           teamExpirationMs != null &&
@@ -372,7 +445,7 @@ export const resolvers = {
         `INSERT INTO teams (event_id, name, color, expiration_date)
          VALUES ($1, $2, $3, $4)
          RETURNING id, event_id, name, color, expiration_date, activated`,
-        [event_id, name, color, expiration_date || null]
+        [event_id, name, color, normalizedExpiration]
       );
       
       return result.rows[0];
@@ -406,9 +479,8 @@ export const resolvers = {
         throw new Error('Event access window has ended');
       }
 
-      const eventExpirationMs = toDateOnlyMs(eventRow.expiration_date);
-      const nowDateMs = toDateOnlyMs(now);
-      if (eventExpirationMs != null && nowDateMs != null && nowDateMs > eventExpirationMs) {
+      const eventExpirationMs = toTimestampMs(eventRow.expiration_date);
+      if (eventExpirationMs != null && nowMs > eventExpirationMs) {
         throw new Error('Event is expired');
       }
 
@@ -424,8 +496,8 @@ export const resolvers = {
         throw new Error('Team not found for this event');
       }
 
-      const teamExpirationMs = toDateOnlyMs(teamResult.rows[0].expiration_date);
-      if (teamExpirationMs != null && nowDateMs != null && nowDateMs > teamExpirationMs) {
+      const teamExpirationMs = toTimestampMs(teamResult.rows[0].expiration_date);
+      if (teamExpirationMs != null && nowMs > teamExpirationMs) {
         throw new Error('Team is expired');
       }
 
@@ -743,6 +815,8 @@ export const resolvers = {
 
     // Update team expiration (requires authentication via event)
     updateTeamExpiration: async (_, { team_id, event_id, keycode, expiration_date }) => {
+      const normalizedExpiration = normalizeExpirationToEndOfDayUtc(expiration_date);
+
       const verifyResult = await query(
         `SELECT id, expiration_date FROM events WHERE id = $1 AND keycode = $2`,
         [event_id, keycode]
@@ -752,10 +826,10 @@ export const resolvers = {
         throw new Error('Invalid event ID or keycode');
       }
 
-      const eventExpirationMs = toDateOnlyMs(verifyResult.rows[0].expiration_date);
-      const teamExpirationMs = toDateOnlyMs(expiration_date);
+      const eventExpirationMs = toTimestampMs(verifyResult.rows[0].expiration_date);
+      const teamExpirationMs = toTimestampMs(normalizedExpiration);
       if (
-        expiration_date &&
+        normalizedExpiration &&
         eventExpirationMs != null &&
         teamExpirationMs != null &&
         teamExpirationMs > eventExpirationMs
@@ -777,7 +851,7 @@ export const resolvers = {
          SET expiration_date = $1
          WHERE id = $2
          RETURNING id, event_id, name, color, expiration_date, activated`,
-        [expiration_date || null, team_id]
+        [normalizedExpiration, team_id]
       );
 
       return result.rows[0];
@@ -803,8 +877,10 @@ export const resolvers = {
 
     // Update event deadline (requires authentication)
     updateEventDeadline: async (_, { event_id, keycode, expiration_date }) => {
+      const normalizedExpiration = normalizeExpirationToEndOfDayUtc(expiration_date);
+
       const verifyResult = await query(
-        `SELECT id, start_date, end_date FROM events WHERE id = $1 AND keycode = $2`,
+        `SELECT id, start_date, end_date, expiration_date FROM events WHERE id = $1 AND keycode = $2`,
         [event_id, keycode]
       );
 
@@ -813,18 +889,20 @@ export const resolvers = {
       }
 
       const existing = verifyResult.rows[0];
-      const endDateMs = toDateOnlyMs(existing.end_date);
-      const deadlineMs = toDateOnlyMs(expiration_date);
+      const endDateMs = toTimestampMs(existing.end_date);
+      const deadlineMs = toTimestampMs(normalizedExpiration);
       if (deadlineMs != null && endDateMs != null && endDateMs > deadlineMs) {
         throw new Error('Event end_date cannot be later than expiration_date');
       }
 
+      const resolvedEndDate = existing.end_date || defaultTimeframeEndFromExpiration(normalizedExpiration);
+
       const result = await query(
         `UPDATE events
-         SET expiration_date = $1
-         WHERE id = $2
+         SET expiration_date = $1, end_date = $2
+         WHERE id = $3
          RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data`,
-        [expiration_date || null, event_id]
+        [normalizedExpiration, resolvedEndDate, event_id]
       );
 
       return { ...result.rows[0], access_level: 'manage' };
@@ -843,8 +921,8 @@ export const resolvers = {
 
       validateWindowOrdering(start_date, end_date);
 
-      const eventExpirationMs = toDateOnlyMs(verifyResult.rows[0].expiration_date);
-      const endDateMs = toDateOnlyMs(end_date);
+      const eventExpirationMs = toTimestampMs(verifyResult.rows[0].expiration_date);
+      const endDateMs = toTimestampMs(end_date);
       if (eventExpirationMs != null && endDateMs != null && endDateMs > eventExpirationMs) {
         throw new Error('Event end_date cannot be later than expiration_date');
       }
@@ -976,7 +1054,7 @@ export const resolvers = {
       // Delete expired teams
       const teamsResult = await query(
         `DELETE FROM teams 
-         WHERE expiration_date < CURRENT_DATE
+        WHERE expiration_date < NOW()
          RETURNING id`
       );
       const deletedTeams = teamsResult.rowCount;
@@ -984,7 +1062,7 @@ export const resolvers = {
       // Delete expired events
       const eventsResult = await query(
         `DELETE FROM events 
-         WHERE expiration_date < CURRENT_DATE
+        WHERE expiration_date < NOW()
          RETURNING id`
       );
       const deletedEvents = eventsResult.rowCount;

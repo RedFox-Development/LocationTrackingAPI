@@ -13,13 +13,14 @@ CREATE TABLE IF NOT EXISTS events (
     logo_mime_type VARCHAR(50),
     geofence_data TEXT,
     organization_name VARCHAR(255),
-    expiration_date DATE,
+    expiration_date TIMESTAMPTZ,
     timezone VARCHAR(100) NOT NULL DEFAULT 'UTC',
-    start_date TIMESTAMP,
-    end_date TIMESTAMP,
+    start_date TIMESTAMPTZ,
+    end_date TIMESTAMPTZ,
     UNIQUE(name, keycode),
     UNIQUE(name, view_keycode),
-    CHECK (start_date IS NULL OR end_date IS NULL OR start_date <= end_date)
+    CHECK (start_date IS NULL OR end_date IS NULL OR start_date <= end_date),
+    CHECK (expiration_date IS NULL OR end_date IS NULL OR end_date <= expiration_date)
 );
 
 -- Teams table: stores teams participating in events
@@ -28,7 +29,7 @@ CREATE TABLE IF NOT EXISTS teams (
     event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     color VARCHAR(7) DEFAULT '#3B82F6',
-    expiration_date DATE,
+    expiration_date TIMESTAMPTZ,
     activated BOOLEAN NOT NULL DEFAULT FALSE,
     UNIQUE(event_id, name)
 );

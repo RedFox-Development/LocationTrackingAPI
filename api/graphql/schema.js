@@ -3,6 +3,8 @@
  */
 
 export const typeDefs = `
+  scalar DateTime
+
   # Event - Tracking event with authentication
   type Event {
     id: Int!
@@ -15,7 +17,7 @@ export const typeDefs = `
     logo_data: String
     logo_mime_type: String
     organization_name: String
-    expiration_date: String
+    expiration_date: DateTime
     timezone: String
     start_date: String
     end_date: String
@@ -29,7 +31,7 @@ export const typeDefs = `
     event_id: Int!
     name: String!
     color: String!
-    expiration_date: String
+    expiration_date: DateTime
     activated: Boolean!
     event: Event
     updates: [LocationUpdate!]!
@@ -39,8 +41,8 @@ export const typeDefs = `
   type TeamSetupConfig {
     team_name: String!
     event_name: String!
-    team_expiration_date: String
-    event_expiration_date: String
+    team_expiration_date: DateTime
+    event_expiration_date: DateTime
     timezone: String
     start_date: String
     end_date: String
@@ -108,7 +110,7 @@ export const typeDefs = `
     id: Int!
     name: String!
     color: String!
-    expiration_date: String
+    expiration_date: DateTime
     locationCount: Int!
     locations: [LocationUpdate!]!
   }
@@ -163,7 +165,7 @@ export const typeDefs = `
       image_mime_type: String
       logo_data: String
       logo_mime_type: String
-      expiration_date: String
+      expiration_date: DateTime
       timezone: String
       start_date: String
       end_date: String
@@ -174,7 +176,7 @@ export const typeDefs = `
       event_id: Int!
       name: String!
       color: String
-      expiration_date: String
+      expiration_date: DateTime
     ): Team!
     
     # Submit a location update
@@ -222,7 +224,7 @@ export const typeDefs = `
       team_id: Int!
       event_id: Int!
       keycode: String!
-      expiration_date: String
+      expiration_date: DateTime
     ): Team!
 
     # Mark team activation status by team+event names (used by mobile setup)
@@ -236,7 +238,7 @@ export const typeDefs = `
     updateEventDeadline(
       event_id: Int!
       keycode: String!
-      expiration_date: String
+      expiration_date: DateTime
     ): Event!
 
     # Update event access timeframe (requires authentication)
