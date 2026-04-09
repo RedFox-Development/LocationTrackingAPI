@@ -23,6 +23,7 @@ const yoga = createYoga({
     allowedHeaders: ['Content-Type', 'Authorization'],
   },
   landingPage: false, // Disable landing page in production
+  graphiql: false, // Disable GraphiQL in production
 });
 
 // Initialize database tables on first request
