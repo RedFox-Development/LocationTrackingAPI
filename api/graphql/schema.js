@@ -219,8 +219,8 @@ export const typeDefs = `
     updateTeamAccessTimeframe(
       event_id: Int!
       keycode: String!
-      team_access_timeframe_start: DateTime
-      team_access_timeframe_end: DateTime
+      timeframe_start: DateTime
+      timeframe_end: DateTime
     ): Event!
 
     # Mark team activation status by team+event names (used by mobile setup)

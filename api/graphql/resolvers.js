@@ -102,7 +102,7 @@ function validateWindowOrdering(startDate, endDate) {
     throw new Error('Invalid timeframe date format');
   }
   if (start > end) {
-    throw new Error('Timeframe start_date must be earlier than or equal to end_date');
+    throw new Error('Timeframe timeframe_start must be earlier than or equal to timeframe_end');
   }
 }
 
@@ -158,7 +158,7 @@ export const resolvers = {
     // Get a specific event
     event: async (_, { id }) => {
       const result = await query(
-        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data
+        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data
          FROM events
          WHERE id = $1`,
         [id]
@@ -252,7 +252,7 @@ export const resolvers = {
     exportEventData: async (_, { event_id, keycode, startDate, endDate }) => {
       // Authenticate
       const eventResult = await query(
-        `SELECT id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data
+        `SELECT id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data
          FROM events
          WHERE id = $1 AND keycode = $2`,
         [event_id, keycode]
@@ -385,31 +385,17 @@ export const resolvers = {
 
   Mutation: {
     // Create a new event
-    createEvent: async (_, { name, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date }) => {
+    createEvent: async (_, { name, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone }) => {
       const normalizedExpiration = normalizeExpirationToEndOfDayUtc(expiration_date);
-      const defaultEndDate = defaultTimeframeEndFromExpiration(normalizedExpiration);
-      const resolvedEndDate = end_date || defaultEndDate;
-
-      validateWindowOrdering(start_date, resolvedEndDate);
-
-      const resolvedEndMs = toTimestampMs(resolvedEndDate);
-      const expirationMs = toTimestampMs(normalizedExpiration);
-      if (
-        resolvedEndMs != null &&
-        expirationMs != null &&
-        resolvedEndMs > expirationMs
-      ) {
-        throw new Error('Event end_date cannot be later than expiration_date');
-      }
 
       const keycode = generateKeycode();
       const viewKeycode = generateKeycode();
       
       const result = await query(
-        `INSERT INTO events (name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
-        [name, keycode, viewKeycode, image_data || null, image_mime_type || null, logo_data || null, logo_mime_type || null, organization_name || null, normalizedExpiration, timezone || 'UTC', start_date || null, resolvedEndDate || null]
+        `INSERT INTO events (name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data`,
+        [name, keycode, viewKeycode, image_data || null, image_mime_type || null, logo_data || null, logo_mime_type || null, organization_name || null, normalizedExpiration, timezone || 'UTC']
       );
       
       return { ...result.rows[0], access_level: 'manage' };
@@ -442,7 +428,7 @@ export const resolvers = {
         console.log('[createLocationUpdate] Received:', { team, event, lat, lon, timestamp });
 
         const eventResult = await query(
-          `SELECT id, expiration_date, start_date, end_date
+          `SELECT id, expiration_date, timeframe_start, timeframe_end
            FROM events
            WHERE name = $1
            LIMIT 1`,
@@ -457,8 +443,8 @@ export const resolvers = {
         const eventRow = eventResult.rows[0];
         const now = new Date();
         const nowMs = now.getTime();
-        const startMs = eventRow.start_date ? new Date(eventRow.start_date).getTime() : null;
-        const endMs = eventRow.end_date ? new Date(eventRow.end_date).getTime() : null;
+        const startMs = eventRow.timeframe_start ? new Date(eventRow.timeframe_start).getTime() : null;
+        const endMs = eventRow.timeframe_end ? new Date(eventRow.timeframe_end).getTime() : null;
 
         if (startMs != null && !Number.isNaN(startMs) && nowMs < startMs) {
           throw new Error('Event access window has not started yet');
@@ -486,7 +472,7 @@ export const resolvers = {
         }
 
         const eventCheckResult = await query(
-          `SELECT team_access_timeframe_start, team_access_timeframe_end FROM events WHERE name = $1 LIMIT 1`,
+          `SELECT timeframe_start, timeframe_end FROM events WHERE name = $1 LIMIT 1`,
           [event]
         );
 
@@ -742,7 +728,7 @@ export const resolvers = {
         `UPDATE events 
          SET image_data = $1, image_mime_type = $2
          WHERE id = $3
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data`,
         [image_data, image_mime_type, event_id]
       );
 
@@ -766,7 +752,7 @@ export const resolvers = {
         `UPDATE events 
          SET logo_data = $1, logo_mime_type = $2
          WHERE id = $3
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data`,
         [logo_data, logo_mime_type, event_id]
       );
 
@@ -790,7 +776,7 @@ export const resolvers = {
         `UPDATE events 
          SET organization_name = $1
          WHERE id = $2
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data`,
         [organization_name, event_id]
       );
 
@@ -832,7 +818,7 @@ export const resolvers = {
     },
 
     // Update team access timeframe for all teams in event (requires authentication)
-    updateTeamAccessTimeframe: async (_, { event_id, keycode, team_access_timeframe_start, team_access_timeframe_end }) => {
+    updateTeamAccessTimeframe: async (_, { event_id, keycode, timeframe_start, timeframe_end }) => {
       const verifyResult = await query(
         `SELECT id FROM events WHERE id = $1 AND keycode = $2`,
         [event_id, keycode]
@@ -842,14 +828,14 @@ export const resolvers = {
         throw new Error('Invalid event ID or keycode');
       }
 
-      validateWindowOrdering(team_access_timeframe_start, team_access_timeframe_end);
+      validateWindowOrdering(timeframe_start, timeframe_end);
 
       const result = await query(
         `UPDATE events
-         SET team_access_timeframe_start = $1, team_access_timeframe_end = $2
+         SET timeframe_start = $1, timeframe_end = $2
          WHERE id = $3
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
-        [team_access_timeframe_start || null, team_access_timeframe_end || null, event_id]
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data`,
+        [timeframe_start || null, timeframe_end || null, event_id]
       );
 
       return { ...result.rows[0], access_level: 'manage' };
@@ -878,7 +864,7 @@ export const resolvers = {
       const normalizedExpiration = normalizeExpirationToEndOfDayUtc(expiration_date);
 
       const verifyResult = await query(
-        `SELECT id, start_date, end_date, expiration_date FROM events WHERE id = $1 AND keycode = $2`,
+        `SELECT id, expiration_date FROM events WHERE id = $1 AND keycode = $2`,
         [event_id, keycode]
       );
 
@@ -886,21 +872,12 @@ export const resolvers = {
         throw new Error('Invalid event ID or keycode');
       }
 
-      const existing = verifyResult.rows[0];
-      const endDateMs = toTimestampMs(existing.end_date);
-      const deadlineMs = toTimestampMs(normalizedExpiration);
-      if (deadlineMs != null && endDateMs != null && endDateMs > deadlineMs) {
-        throw new Error('Event end_date cannot be later than expiration_date');
-      }
-
-      const resolvedEndDate = existing.end_date || defaultTimeframeEndFromExpiration(normalizedExpiration);
-
       const result = await query(
         `UPDATE events
-         SET expiration_date = $1, end_date = $2
-         WHERE id = $3
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
-        [normalizedExpiration, resolvedEndDate, event_id]
+         SET expiration_date = $1
+         WHERE id = $2
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data`,
+        [normalizedExpiration, event_id]
       );
 
       return { ...result.rows[0], access_level: 'manage' };
@@ -922,14 +899,14 @@ export const resolvers = {
       const eventExpirationMs = toTimestampMs(verifyResult.rows[0].expiration_date);
       const endDateMs = toTimestampMs(end_date);
       if (eventExpirationMs != null && endDateMs != null && endDateMs > eventExpirationMs) {
-        throw new Error('Event end_date cannot be later than expiration_date');
+        throw new Error('Event timeframe_end cannot be later than expiration_date');
       }
 
       const result = await query(
         `UPDATE events
-         SET start_date = $1, end_date = $2
+         SET timeframe_start = $1, timeframe_end = $2
          WHERE id = $3
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data`,
         [start_date || null, end_date || null, event_id]
       );
 
@@ -996,10 +973,11 @@ export const resolvers = {
         `UPDATE events 
          SET geofence_data = $1
          WHERE id = $2
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data`,
         [geofence_data, event_id]
       );
-    },
+
+      return { ...result.rows[0], access_level: 'manage' };
 
     // Delete event geofence (requires authentication)
     deleteEventGeofence: async (_, { event_id, keycode }) => {
@@ -1018,7 +996,7 @@ export const resolvers = {
         `UPDATE events 
          SET geofence_data = NULL
          WHERE id = $1
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data`,
         [event_id]
       );
 
@@ -1090,7 +1068,7 @@ export const resolvers = {
   Team: {
     event: async (parent) => {
       const result = await query(
-        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data
+        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data
          FROM events
          WHERE id = $1`,
         [parent.event_id]
