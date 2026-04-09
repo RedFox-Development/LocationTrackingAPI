@@ -460,7 +460,7 @@ export const resolvers = {
         }
 
         const teamResult = await query(
-          `SELECT expiration_date
+          `SELECT id
            FROM teams
            WHERE name = $1 AND event_id = $2
            LIMIT 1`,
@@ -469,34 +469,6 @@ export const resolvers = {
 
         if (teamResult.rows.length === 0) {
           throw new Error('Team not found for this event');
-        }
-
-        const eventCheckResult = await query(
-          `SELECT timeframe_start, timeframe_end FROM events WHERE name = $1 LIMIT 1`,
-          [event]
-        );
-
-        if (eventCheckResult.rows.length > 0) {
-          const timeframeStart = toTimestampMs(eventCheckResult.rows[0].timeframe_start);
-          const timeframeEnd = toTimestampMs(eventCheckResult.rows[0].timeframe_end);
-          
-          console.log('[createLocationUpdate] Team access timeframe check:', {
-            start: eventCheckResult.rows[0].timeframe_start,
-            end: eventCheckResult.rows[0].timeframe_end,
-            start_ms: timeframeStart,
-            end_ms: timeframeEnd,
-            now_ms: nowMs,
-            before_start: timeframeStart != null && nowMs < timeframeStart,
-            after_end: timeframeEnd != null && nowMs > timeframeEnd,
-            now: new Date(nowMs),
-          });
-
-          if (timeframeStart != null && nowMs < timeframeStart) {
-            throw new Error('Team access timeframe has not started yet');
-          }
-          if (timeframeEnd != null && nowMs > timeframeEnd) {
-            throw new Error('Team access timeframe has ended');
-          }
         }
 
         const result = await query(
