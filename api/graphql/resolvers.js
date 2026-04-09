@@ -979,6 +979,8 @@ export const resolvers = {
 
       return { ...result.rows[0], access_level: 'manage' };
 
+    },
+
     // Delete event geofence (requires authentication)
     deleteEventGeofence: async (_, { event_id, keycode }) => {
       // Verify keycode
