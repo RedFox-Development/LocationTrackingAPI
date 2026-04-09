@@ -24,8 +24,8 @@ export function getPool() {
     ssl: {
       rejectUnauthorized: false // Aiven requires SSL
     },
-    max: 5,
-    idleTimeoutMillis: 30000,
+    max: 20,
+    idleTimeoutMillis: 5000,
     connectionTimeoutMillis: 5000,
   });
   

@@ -128,7 +128,7 @@ export const resolvers = {
     // Get teams for an event
     teams: async (_, { event_id }) => {
       const result = await query(
-        `SELECT id, event_id, name, color, expiration_date, access_start_date, access_end_date, activated
+        `SELECT id, event_id, name, color, activated
          FROM teams
          WHERE event_id = $1
          ORDER BY name ASC`,
@@ -184,9 +184,8 @@ export const resolvers = {
         `SELECT
            t.name AS team_name,
            e.name AS event_name,
-           t.expiration_date AS team_expiration_date,
-           t.access_start_date AS team_access_start_date,
-           t.access_end_date AS team_access_end_date,
+           e.team_access_timeframe_start,
+           e.team_access_timeframe_end,
            e.expiration_date AS event_expiration_date,
            e.timezone,
            e.start_date,
@@ -204,7 +203,7 @@ export const resolvers = {
       );
 
       return result.rows[0] || null;
-    },
+    },,
 
     // Login to an event
     login: async (_, { event_name, keycode }) => {
@@ -236,7 +235,7 @@ export const resolvers = {
 
       // Get teams for this event
       const teamsResult = await query(
-        `SELECT id, event_id, name, color, expiration_date, access_start_date, access_end_date, activated
+        `SELECT id, event_id, name, color, activated
          FROM teams
          WHERE event_id = $1
          ORDER BY name ASC`,
@@ -284,7 +283,7 @@ export const resolvers = {
 
       // Get teams for this event
       const teamsResult = await query(
-        `SELECT id, event_id, name, color, expiration_date, access_start_date, access_end_date, activated
+        `SELECT id, event_id, name, color, activated
          FROM teams
          WHERE event_id = $1
          ORDER BY name ASC`,
@@ -411,7 +410,7 @@ export const resolvers = {
       const result = await query(
         `INSERT INTO events (name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
         [name, keycode, viewKeycode, image_data || null, image_mime_type || null, logo_data || null, logo_mime_type || null, organization_name || null, normalizedExpiration, timezone || 'UTC', start_date || null, resolvedEndDate || null]
       );
       
@@ -419,35 +418,21 @@ export const resolvers = {
     },
 
     // Create a new team
-    createTeam: async (_, { event_id, name, color = '#3B82F6', expiration_date }) => {
-      const normalizedExpiration = normalizeExpirationToEndOfDayUtc(expiration_date);
+    createTeam: async (_, { event_id, name, color = '#3B82F6' }) => {
+      const eventResult = await query(
+        `SELECT id FROM events WHERE id = $1`,
+        [event_id]
+      );
 
-      if (expiration_date) {
-        const eventResult = await query(
-          `SELECT expiration_date FROM events WHERE id = $1`,
-          [event_id]
-        );
-
-        if (eventResult.rows.length === 0) {
-          throw new Error('Event not found');
-        }
-
-        const eventExpirationMs = toTimestampMs(eventResult.rows[0].expiration_date);
-        const teamExpirationMs = toTimestampMs(normalizedExpiration);
-        if (
-          eventExpirationMs != null &&
-          teamExpirationMs != null &&
-          teamExpirationMs > eventExpirationMs
-        ) {
-          throw new Error('Team expiration_date cannot be later than event expiration_date');
-        }
+      if (eventResult.rows.length === 0) {
+        throw new Error('Event not found');
       }
 
       const result = await query(
-        `INSERT INTO teams (event_id, name, color, expiration_date)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id, event_id, name, color, expiration_date, access_start_date, access_end_date, activated`,
-        [event_id, name, color, normalizedExpiration]
+        `INSERT INTO teams (event_id, name, color)
+         VALUES ($1, $2, $3)
+         RETURNING id, event_id, name, color, activated`,
+        [event_id, name, color]
       );
       
       return result.rows[0];
@@ -455,151 +440,184 @@ export const resolvers = {
 
     // Create a location update
     createLocationUpdate: async (_, { team, event, lat, lon, timestamp }) => {
-      const eventResult = await query(
-        `SELECT id, expiration_date, start_date, end_date
-         FROM events
-         WHERE name = $1
-         LIMIT 1`,
-        [event]
-      );
-
-      if (eventResult.rows.length === 0) {
-        throw new Error('Event not found');
-      }
-
-      const eventRow = eventResult.rows[0];
-      const now = new Date();
-      const nowMs = now.getTime();
-      const startMs = eventRow.start_date ? new Date(eventRow.start_date).getTime() : null;
-      const endMs = eventRow.end_date ? new Date(eventRow.end_date).getTime() : null;
-
-      if (startMs != null && !Number.isNaN(startMs) && nowMs < startMs) {
-        throw new Error('Event access window has not started yet');
-      }
-
-      if (endMs != null && !Number.isNaN(endMs) && nowMs > endMs) {
-        throw new Error('Event access window has ended');
-      }
-
-      const eventExpirationMs = toTimestampMs(eventRow.expiration_date);
-      if (eventExpirationMs != null && nowMs > eventExpirationMs) {
-        throw new Error('Event is expired');
-      }
-
-      const teamResult = await query(
-        `SELECT expiration_date
-         FROM teams
-         WHERE name = $1 AND event_id = $2
-         LIMIT 1`,
-        [team, eventRow.id]
-      );
-
-      if (teamResult.rows.length === 0) {
-        throw new Error('Team not found for this event');
-      }
-
-      const teamExpirationMs = toTimestampMs(teamResult.rows[0].expiration_date);
-      if (teamExpirationMs != null && nowMs > teamExpirationMs) {
-        throw new Error('Team is expired');
-      }
-
-      const result = await query(
-        `INSERT INTO location_updates (team, event, lat, lon, timestamp)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, team, event, lat, lon, timestamp`,
-        [team, event, lat, lon, timestamp || new Date().toISOString()]
-      );
-
-      // Best-effort waypoint visit detection. Failures here should never block location ingestion.
       try {
+        console.log('[createLocationUpdate] Received:', { team, event, lat, lon, timestamp });
+
         const eventResult = await query(
-          `SELECT id FROM events WHERE name = $1 LIMIT 1`,
+          `SELECT id, expiration_date, start_date, end_date
+           FROM events
+           WHERE name = $1
+           LIMIT 1`,
           [event]
         );
 
-        if (eventResult.rows.length > 0) {
-          const eventId = eventResult.rows[0].id;
-          const teamResult = await query(
-            `SELECT id FROM teams WHERE name = $1 AND event_id = $2 LIMIT 1`,
-            [team, eventId]
+        if (eventResult.rows.length === 0) {
+          console.error('[createLocationUpdate] Event not found:', event);
+          throw new Error('Event not found');
+        }
+
+        const eventRow = eventResult.rows[0];
+        const now = new Date();
+        const nowMs = now.getTime();
+        const startMs = eventRow.start_date ? new Date(eventRow.start_date).getTime() : null;
+        const endMs = eventRow.end_date ? new Date(eventRow.end_date).getTime() : null;
+
+        if (startMs != null && !Number.isNaN(startMs) && nowMs < startMs) {
+          throw new Error('Event access window has not started yet');
+        }
+
+        if (endMs != null && !Number.isNaN(endMs) && nowMs > endMs) {
+          throw new Error('Event access window has ended');
+        }
+
+        const eventExpirationMs = toTimestampMs(eventRow.expiration_date);
+        if (eventExpirationMs != null && nowMs > eventExpirationMs) {
+          throw new Error('Event is expired');
+        }
+
+        const teamResult = await query(
+          `SELECT expiration_date
+           FROM teams
+           WHERE name = $1 AND event_id = $2
+           LIMIT 1`,
+          [team, eventRow.id]
+        );
+
+        if (teamResult.rows.length === 0) {
+          throw new Error('Team not found for this event');
+        }
+
+        const eventCheckResult = await query(
+          `SELECT team_access_timeframe_start, team_access_timeframe_end FROM events WHERE name = $1 LIMIT 1`,
+          [event]
+        );
+
+        if (eventCheckResult.rows.length > 0) {
+          const timeframeStart = toTimestampMs(eventCheckResult.rows[0].team_access_timeframe_start);
+          const timeframeEnd = toTimestampMs(eventCheckResult.rows[0].team_access_timeframe_end);
+          
+          console.log('[createLocationUpdate] Team access timeframe check:', {
+            start: eventCheckResult.rows[0].team_access_timeframe_start,
+            end: eventCheckResult.rows[0].team_access_timeframe_end,
+            start_ms: timeframeStart,
+            end_ms: timeframeEnd,
+            now_ms: nowMs,
+            before_start: timeframeStart != null && nowMs < timeframeStart,
+            after_end: timeframeEnd != null && nowMs > timeframeEnd,
+            now: new Date(nowMs),
+          });
+
+          if (timeframeStart != null && nowMs < timeframeStart) {
+            throw new Error('Team access timeframe has not started yet');
+          }
+          if (timeframeEnd != null && nowMs > timeframeEnd) {
+            throw new Error('Team access timeframe has ended');
+          }
+        }
+
+        const result = await query(
+          `INSERT INTO location_updates (team, event, lat, lon, timestamp)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING id, team, event, lat, lon, timestamp`,
+          [team, event, lat, lon, timestamp || new Date().toISOString()]
+        );
+
+        // Best-effort waypoint visit detection. Failures here should never block location ingestion.
+        try {
+          const waypointEventResult = await query(
+            `SELECT id FROM events WHERE name = $1 LIMIT 1`,
+            [event]
           );
 
-          if (teamResult.rows.length > 0) {
-            const teamId = teamResult.rows[0].id;
-            const waypointResult = await query(
-              `SELECT id, lat, lon
-               FROM waypoints
-               WHERE event_id = $1`,
-              [eventId]
+          if (waypointEventResult.rows.length > 0) {
+            const eventId = waypointEventResult.rows[0].id;
+            const teamResult = await query(
+              `SELECT id FROM teams WHERE name = $1 AND event_id = $2 LIMIT 1`,
+              [team, eventId]
             );
 
-            if (waypointResult.rows.length > 0) {
-              const recentUpdatesResult = await query(
-                `SELECT lat, lon
-                 FROM location_updates
-                 WHERE team = $1 AND event = $2
-                 ORDER BY timestamp DESC, id DESC
-                 LIMIT $3`,
-                [team, event, WAYPOINT_CONSECUTIVE_UPDATES_REQUIRED]
+            if (teamResult.rows.length > 0) {
+              const teamId = teamResult.rows[0].id;
+              const waypointResult = await query(
+                `SELECT id, lat, lon
+                 FROM waypoints
+                 WHERE event_id = $1`,
+                [eventId]
               );
 
-              if (recentUpdatesResult.rows.length === WAYPOINT_CONSECUTIVE_UPDATES_REQUIRED) {
-                for (const waypoint of waypointResult.rows) {
-                  const waypointLat = parseFloat(waypoint.lat);
-                  const waypointLon = parseFloat(waypoint.lon);
+              if (waypointResult.rows.length > 0) {
+                const recentUpdatesResult = await query(
+                  `SELECT lat, lon
+                   FROM location_updates
+                   WHERE team = $1 AND event = $2
+                   ORDER BY timestamp DESC, id DESC
+                   LIMIT $3`,
+                  [team, event, WAYPOINT_CONSECUTIVE_UPDATES_REQUIRED]
+                );
 
-                  const latestDistance = haversineDistanceMeters(
-                    lat,
-                    lon,
-                    waypointLat,
-                    waypointLon
-                  );
+                if (recentUpdatesResult.rows.length === WAYPOINT_CONSECUTIVE_UPDATES_REQUIRED) {
+                  for (const waypoint of waypointResult.rows) {
+                    const waypointLat = parseFloat(waypoint.lat);
+                    const waypointLon = parseFloat(waypoint.lon);
 
-                  if (latestDistance > WAYPOINT_VISIT_RADIUS_METERS) {
-                    continue;
-                  }
-
-                  const allWithinRadius = recentUpdatesResult.rows.every((update) => {
-                    const updateLat = parseFloat(update.lat);
-                    const updateLon = parseFloat(update.lon);
-                    return (
-                      haversineDistanceMeters(updateLat, updateLon, waypointLat, waypointLon) <=
-                      WAYPOINT_VISIT_RADIUS_METERS
-                    );
-                  });
-
-                  if (!allWithinRadius) {
-                    continue;
-                  }
-
-                  await query(
-                    `INSERT INTO waypoint_visits (waypoint_id, team_id, visited_at, lat, lon)
-                     VALUES ($1, $2, $3, $4, $5)
-                     ON CONFLICT (waypoint_id, team_id) DO NOTHING`,
-                    [
-                      waypoint.id,
-                      teamId,
-                      timestamp || new Date().toISOString(),
+                    const latestDistance = haversineDistanceMeters(
                       lat,
                       lon,
-                    ]
-                  );
+                      waypointLat,
+                      waypointLon
+                    );
+
+                    if (latestDistance > WAYPOINT_VISIT_RADIUS_METERS) {
+                      continue;
+                    }
+
+                    const allWithinRadius = recentUpdatesResult.rows.every((update) => {
+                      const updateLat = parseFloat(update.lat);
+                      const updateLon = parseFloat(update.lon);
+                      return (
+                        haversineDistanceMeters(updateLat, updateLon, waypointLat, waypointLon) <=
+                        WAYPOINT_VISIT_RADIUS_METERS
+                      );
+                    });
+
+                    if (!allWithinRadius) {
+                      continue;
+                    }
+
+                    await query(
+                      `INSERT INTO waypoint_visits (waypoint_id, team_id, visited_at, lat, lon)
+                       VALUES ($1, $2, $3, $4, $5)
+                       ON CONFLICT (waypoint_id, team_id) DO NOTHING`,
+                      [
+                        waypoint.id,
+                        teamId,
+                        timestamp || new Date().toISOString(),
+                        lat,
+                        lon,
+                      ]
+                    );
+                  }
                 }
               }
             }
           }
+        } catch (visitDetectionError) {
+          console.error('[createLocationUpdate] Waypoint visit detection error:', visitDetectionError.message);
         }
-      } catch (visitDetectionError) {
-        console.error('Waypoint visit detection error:', visitDetectionError.message);
+        
+        const row = result.rows[0];
+        console.log('[createLocationUpdate] Insert successful:', row.id);
+        return {
+          ...row,
+          lat: parseFloat(row.lat),
+          lon: parseFloat(row.lon),
+          timestamp: toIsoDateTime(row.timestamp),
+        };
+      } catch (error) {
+        console.error('[createLocationUpdate] Error:', error.message);
+        console.error('[createLocationUpdate] Stack:', error.stack);
+        throw error;
       }
-      
-      const row = result.rows[0];
-      return {
-        ...row,
-        lat: parseFloat(row.lat),
-        lon: parseFloat(row.lon),
-        timestamp: toIsoDateTime(row.timestamp),
-      };
     },
 
     // Create a waypoint (requires authentication)
@@ -726,7 +744,7 @@ export const resolvers = {
         `UPDATE events 
          SET image_data = $1, image_mime_type = $2
          WHERE id = $3
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
         [image_data, image_mime_type, event_id]
       );
 
@@ -750,7 +768,7 @@ export const resolvers = {
         `UPDATE events 
          SET logo_data = $1, logo_mime_type = $2
          WHERE id = $3
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
         [logo_data, logo_mime_type, event_id]
       );
 
@@ -774,7 +792,7 @@ export const resolvers = {
         `UPDATE events 
          SET organization_name = $1
          WHERE id = $2
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
         [organization_name, event_id]
       );
 
@@ -808,59 +826,15 @@ export const resolvers = {
         `UPDATE teams 
          SET color = $1
          WHERE id = $2
-         RETURNING id, event_id, name, color, expiration_date, access_start_date, access_end_date, activated`,
+         RETURNING id, event_id, name, color, activated`,
         [color, team_id]
       );
 
       return result.rows[0];
     },
 
-    // Update team expiration (requires authentication via event)
-    updateTeamExpiration: async (_, { team_id, event_id, keycode, expiration_date }) => {
-      const normalizedExpiration = normalizeExpirationToEndOfDayUtc(expiration_date);
-
-      const verifyResult = await query(
-        `SELECT id, expiration_date FROM events WHERE id = $1 AND keycode = $2`,
-        [event_id, keycode]
-      );
-
-      if (verifyResult.rows.length === 0) {
-        throw new Error('Invalid event ID or keycode');
-      }
-
-      const eventExpirationMs = toTimestampMs(verifyResult.rows[0].expiration_date);
-      const teamExpirationMs = toTimestampMs(normalizedExpiration);
-      if (
-        normalizedExpiration &&
-        eventExpirationMs != null &&
-        teamExpirationMs != null &&
-        teamExpirationMs > eventExpirationMs
-      ) {
-        throw new Error('Team expiration_date cannot be later than event expiration_date');
-      }
-
-      const teamVerifyResult = await query(
-        `SELECT id FROM teams WHERE id = $1 AND event_id = $2`,
-        [team_id, event_id]
-      );
-
-      if (teamVerifyResult.rows.length === 0) {
-        throw new Error('Team not found or does not belong to this event');
-      }
-
-      const result = await query(
-        `UPDATE teams
-         SET expiration_date = $1
-         WHERE id = $2
-         RETURNING id, event_id, name, color, expiration_date, access_start_date, access_end_date, activated`,
-        [normalizedExpiration, team_id]
-      );
-
-      return result.rows[0];
-    },
-
-    // Update team access window (requires authentication via event)
-    updateTeamAccessWindow: async (_, { team_id, event_id, keycode, start_date, end_date }) => {
+    // Update team access timeframe for all teams in event (requires authentication)
+    updateTeamAccessTimeframe: async (_, { event_id, keycode, team_access_timeframe_start, team_access_timeframe_end }) => {
       const verifyResult = await query(
         `SELECT id FROM events WHERE id = $1 AND keycode = $2`,
         [event_id, keycode]
@@ -870,27 +844,17 @@ export const resolvers = {
         throw new Error('Invalid event ID or keycode');
       }
 
-      const teamVerifyResult = await query(
-        `SELECT id FROM teams WHERE id = $1 AND event_id = $2`,
-        [team_id, event_id]
-      );
-
-      if (teamVerifyResult.rows.length === 0) {
-        throw new Error('Team not found or does not belong to this event');
-      }
-
-      validateWindowOrdering(start_date, end_date);
+      validateWindowOrdering(team_access_timeframe_start, team_access_timeframe_end);
 
       const result = await query(
-        `UPDATE teams
-         SET access_start_date = $1,
-             access_end_date = $2
+        `UPDATE events
+         SET team_access_timeframe_start = $1, team_access_timeframe_end = $2
          WHERE id = $3
-         RETURNING id, event_id, name, color, expiration_date, access_start_date, access_end_date, activated`,
-        [start_date || null, end_date || null, team_id]
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
+        [team_access_timeframe_start || null, team_access_timeframe_end || null, event_id]
       );
 
-      return result.rows[0];
+      return { ...result.rows[0], access_level: 'manage' };
     },
 
     // Set team activation status after mobile setup
@@ -900,7 +864,7 @@ export const resolvers = {
          SET activated = $3
          FROM events e
          WHERE t.event_id = e.id AND e.name = $1 AND t.name = $2
-         RETURNING t.id, t.event_id, t.name, t.color, t.expiration_date, t.access_start_date, t.access_end_date, t.activated`,
+         RETURNING t.id, t.event_id, t.name, t.color, t.activated`,
         [event_name, team_name, activated]
       );
 
@@ -937,7 +901,7 @@ export const resolvers = {
         `UPDATE events
          SET expiration_date = $1, end_date = $2
          WHERE id = $3
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
         [normalizedExpiration, resolvedEndDate, event_id]
       );
 
@@ -967,7 +931,7 @@ export const resolvers = {
         `UPDATE events
          SET start_date = $1, end_date = $2
          WHERE id = $3
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
         [start_date || null, end_date || null, event_id]
       );
 
@@ -988,7 +952,7 @@ export const resolvers = {
 
       // Verify team belongs to event
       const teamResult = await query(
-        `SELECT id, event_id, name, color, expiration_date, access_start_date, access_end_date, activated
+        `SELECT id, event_id, name, color, activated
          FROM teams
          WHERE id = $1 AND event_id = $2`,
         [team_id, event_id]
@@ -1034,11 +998,7 @@ export const resolvers = {
         `UPDATE events 
          SET geofence_data = $1
          WHERE id = $2
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data`,
-        [geofence_data, event_id]
-      );
-
-      return { ...result.rows[0], access_level: 'manage' };
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
     },
 
     // Delete event geofence (requires authentication)
@@ -1058,7 +1018,7 @@ export const resolvers = {
         `UPDATE events 
          SET geofence_data = NULL
          WHERE id = $1
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
         [event_id]
       );
 
@@ -1117,7 +1077,7 @@ export const resolvers = {
   Event: {
     teams: async (parent) => {
       const result = await query(
-        `SELECT id, event_id, name, color, expiration_date, access_start_date, access_end_date, activated
+        `SELECT id, event_id, name, color, activated
          FROM teams
          WHERE event_id = $1
          ORDER BY name ASC`,

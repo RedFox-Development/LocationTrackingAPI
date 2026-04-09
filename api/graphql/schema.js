@@ -21,6 +21,8 @@ export const typeDefs = `
     timezone: String
     start_date: String
     end_date: String
+    team_access_timeframe_start: DateTime
+    team_access_timeframe_end: DateTime
     geofence_data: String
     teams: [Team!]!
   }
@@ -31,9 +33,6 @@ export const typeDefs = `
     event_id: Int!
     name: String!
     color: String!
-    expiration_date: DateTime
-    access_start_date: DateTime
-    access_end_date: DateTime
     activated: Boolean!
     event: Event
     updates: [LocationUpdate!]!
@@ -43,9 +42,8 @@ export const typeDefs = `
   type TeamSetupConfig {
     team_name: String!
     event_name: String!
-    team_expiration_date: DateTime
-    team_access_start_date: DateTime
-    team_access_end_date: DateTime
+    team_access_timeframe_start: DateTime
+    team_access_timeframe_end: DateTime
     event_expiration_date: DateTime
     timezone: String
     start_date: String
@@ -114,7 +112,6 @@ export const typeDefs = `
     id: Int!
     name: String!
     color: String!
-    expiration_date: DateTime
     locationCount: Int!
     locations: [LocationUpdate!]!
   }
@@ -180,7 +177,6 @@ export const typeDefs = `
       event_id: Int!
       name: String!
       color: String
-      expiration_date: DateTime
     ): Team!
     
     # Submit a location update
@@ -223,22 +219,13 @@ export const typeDefs = `
       color: String!
     ): Team!
 
-    # Update team expiration (requires authentication via event)
-    updateTeamExpiration(
-      team_id: Int!
+    # Update team access timeframe for all teams in event (requires authentication)
+    updateTeamAccessTimeframe(
       event_id: Int!
       keycode: String!
-      expiration_date: DateTime
-    ): Team!
-
-    # Update team access window (requires authentication via event)
-    updateTeamAccessWindow(
-      team_id: Int!
-      event_id: Int!
-      keycode: String!
-      start_date: String
-      end_date: String
-    ): Team!
+      team_access_timeframe_start: DateTime
+      team_access_timeframe_end: DateTime
+    ): Event!
 
     # Mark team activation status by team+event names (used by mobile setup)
     setTeamActivated(
