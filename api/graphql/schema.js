@@ -19,10 +19,8 @@ export const typeDefs = `
     organization_name: String
     expiration_date: DateTime
     timezone: String
-    start_date: String
-    end_date: String
-    team_access_timeframe_start: DateTime
-    team_access_timeframe_end: DateTime
+    timeframe_start: DateTime
+    timeframe_end: DateTime
     geofence_data: String
     teams: [Team!]!
   }
@@ -42,12 +40,10 @@ export const typeDefs = `
   type TeamSetupConfig {
     team_name: String!
     event_name: String!
-    team_access_timeframe_start: DateTime
-    team_access_timeframe_end: DateTime
+    timeframe_start: DateTime
+    timeframe_end: DateTime
     event_expiration_date: DateTime
     timezone: String
-    start_date: String
-    end_date: String
     image_data: String
     image_mime_type: String
     logo_data: String

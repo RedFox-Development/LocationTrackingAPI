@@ -15,15 +15,12 @@ CREATE TABLE IF NOT EXISTS events (
     organization_name VARCHAR(255),
     expiration_date TIMESTAMPTZ,
     timezone VARCHAR(100) NOT NULL DEFAULT 'UTC',
-    start_date TIMESTAMPTZ,
-    end_date TIMESTAMPTZ,
-    team_access_timeframe_start TIMESTAMPTZ,
-    team_access_timeframe_end TIMESTAMPTZ,
+    timeframe_start TIMESTAMPTZ,
+    timeframe_end TIMESTAMPTZ,
     UNIQUE(name, keycode),
     UNIQUE(name, view_keycode),
-    CHECK (start_date IS NULL OR end_date IS NULL OR start_date <= end_date),
-    CHECK (expiration_date IS NULL OR end_date IS NULL OR end_date <= expiration_date),
-    CHECK (team_access_timeframe_start IS NULL OR team_access_timeframe_end IS NULL OR team_access_timeframe_start <= team_access_timeframe_end)
+    CHECK (expiration_date IS NULL OR timeframe_end IS NULL OR timeframe_end <= expiration_date),
+    CHECK (timeframe_start IS NULL OR timeframe_end IS NULL OR timeframe_start <= timeframe_end)
 );
 
 -- Teams table: stores teams participating in events

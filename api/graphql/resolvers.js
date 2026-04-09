@@ -170,7 +170,7 @@ export const resolvers = {
     // Note: Does not return keycode for security
     eventByName: async (_, { event_name }) => {
       const result = await query(
-        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data
+        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data
          FROM events
          WHERE name = $1`,
         [event_name]
@@ -184,12 +184,10 @@ export const resolvers = {
         `SELECT
            t.name AS team_name,
            e.name AS event_name,
-           e.team_access_timeframe_start,
-           e.team_access_timeframe_end,
+           e.timeframe_start,
+           e.timeframe_end,
            e.expiration_date AS event_expiration_date,
            e.timezone,
-           e.start_date,
-           e.end_date,
            e.image_data,
            e.image_mime_type,
            e.logo_data,
@@ -211,7 +209,7 @@ export const resolvers = {
 
       // Find event by name and either management or view-only keycode.
       const eventResult = await query(
-        `SELECT id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data
+        `SELECT id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data
          FROM events
          WHERE name = $1 AND (UPPER(keycode) = $2 OR UPPER(view_keycode) = $2)`,
         [event_name, normalizedKeycode]
@@ -493,12 +491,12 @@ export const resolvers = {
         );
 
         if (eventCheckResult.rows.length > 0) {
-          const timeframeStart = toTimestampMs(eventCheckResult.rows[0].team_access_timeframe_start);
-          const timeframeEnd = toTimestampMs(eventCheckResult.rows[0].team_access_timeframe_end);
+          const timeframeStart = toTimestampMs(eventCheckResult.rows[0].timeframe_start);
+          const timeframeEnd = toTimestampMs(eventCheckResult.rows[0].timeframe_end);
           
           console.log('[createLocationUpdate] Team access timeframe check:', {
-            start: eventCheckResult.rows[0].team_access_timeframe_start,
-            end: eventCheckResult.rows[0].team_access_timeframe_end,
+            start: eventCheckResult.rows[0].timeframe_start,
+            end: eventCheckResult.rows[0].timeframe_end,
             start_ms: timeframeStart,
             end_ms: timeframeEnd,
             now_ms: nowMs,
