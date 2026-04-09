@@ -170,7 +170,7 @@ export const resolvers = {
     // Note: Does not return keycode for security
     eventByName: async (_, { event_name }) => {
       const result = await query(
-        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data
+        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data
          FROM events
          WHERE name = $1`,
         [event_name]
@@ -203,7 +203,7 @@ export const resolvers = {
       );
 
       return result.rows[0] || null;
-    },,
+    },
 
     // Login to an event
     login: async (_, { event_name, keycode }) => {
@@ -211,7 +211,7 @@ export const resolvers = {
 
       // Find event by name and either management or view-only keycode.
       const eventResult = await query(
-        `SELECT id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, geofence_data
+        `SELECT id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data
          FROM events
          WHERE name = $1 AND (UPPER(keycode) = $2 OR UPPER(view_keycode) = $2)`,
         [event_name, normalizedKeycode]
@@ -999,6 +999,8 @@ export const resolvers = {
          SET geofence_data = $1
          WHERE id = $2
          RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, start_date, end_date, team_access_timeframe_start, team_access_timeframe_end, geofence_data`,
+        [geofence_data, event_id]
+      );
     },
 
     // Delete event geofence (requires authentication)
