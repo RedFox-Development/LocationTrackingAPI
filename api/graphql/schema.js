@@ -22,6 +22,7 @@ export const typeDefs = `
     timeframe_start: DateTime
     timeframe_end: DateTime
     geofence_data: String
+    update_frequency: Int
     teams: [Team!]!
   }
 
@@ -49,6 +50,7 @@ export const typeDefs = `
     logo_data: String
     logo_mime_type: String
     organization_name: String
+    update_frequency: Int
   }
 
   # LocationUpdate - Location update from a team
@@ -155,6 +157,7 @@ export const typeDefs = `
   type Mutation {
     # Create a new event (keycode is auto-generated)
     # image_data and logo_data should be base64 encoded strings
+    # update_frequency is in milliseconds, range 1000-60000 (1-60 seconds), defaults to 10000
     createEvent(
       name: String!
       organization_name: String
@@ -164,6 +167,7 @@ export const typeDefs = `
       logo_mime_type: String
       expiration_date: DateTime
       timezone: String
+      update_frequency: Int
       start_date: String
       end_date: String
     ): Event!
@@ -292,6 +296,13 @@ export const typeDefs = `
       event_id: Int!
       keycode: String!
     ): Waypoint!
+
+    # Update event location update frequency (requires authentication)
+    updateEventUpdateFrequency(
+      event_id: Int!
+      keycode: String!
+      update_frequency: Int!
+    ): Event!
     
     # Cleanup expired data (internal/admin use)
     cleanupExpiredData(secret: String!): CleanupResult!
