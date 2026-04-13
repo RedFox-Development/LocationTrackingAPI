@@ -58,11 +58,17 @@ This keeps the service low-maintenance while enforcing retention limits for GDPR
 
 The API uses PostgreSQL with three main tables:
 
-- **events**: Tracking events (id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type)
+- **events**: Tracking events (id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, timeframe_start, timeframe_end, update_frequency)
 - **teams**: Teams participating in events (id, event_id, name, color)
 - **location_updates**: Location updates from team devices (id, team, event, lat, lon, timestamp)
 
 Images are stored as base64 encoded data in the database for portability and self-containment.
+
+**New fields:**
+- `update_frequency` (INTEGER): Location update interval in milliseconds (range: 1000-60000 ms, default: 10000 ms)
+- `timeframe_start` (TIMESTAMPTZ): Team access window start time (precise to the second)
+- `timeframe_end` (TIMESTAMPTZ): Team access window end time (precise to the second)
+- `organization_name` (VARCHAR): Organization name for the event
 
 See [db_setup.sql](db_setup.sql) for the complete schema.
 
@@ -73,6 +79,7 @@ If you have an existing database, you may need to run migrations to update the s
 ```bash
 # Run migrations on your PostgreSQL database
 psql -h <host> -U <user> -d <database> -f migrations/001_add_event_images.sql
+psql -h <host> -U <user> -d <database> -f migrations/012_add_update_frequency.sql
 ```
 
 See the [migrations folder](migrations/) for available migrations and documentation.
