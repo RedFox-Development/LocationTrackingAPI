@@ -17,38 +17,38 @@ const schema = createSchema({
 const yoga = createYoga({
   schema,
   graphqlEndpoint: '/api',
-  cors: true, // Enable CORS
-  landingPage: false, // Disable landing page in production
-  graphiql: false, // Disable GraphiQL in production
+  cors: true,
+  landingPage: false,
+  graphiql: false,
 });
 
-// Initialize database tables on first request
 let dbInitialized = false;
 
-// CORS middleware
-const setCorsHeaders = (res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, HEAD, DELETE, PUT, PATCH');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Accept-Language, Content-Language, X-Requested-With');
-  res.setHeader('Access-Control-Max-Age', '86400');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, HEAD, DELETE, PUT, PATCH',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept, Accept-Language, Content-Language, X-Requested-With',
+  'Access-Control-Max-Age': '86400',
+  'Access-Control-Allow-Credentials': 'true',
 };
 
 export default async (req, res) => {
-  // Set CORS headers immediately
-  setCorsHeaders(res);
-  
-  // Handle OPTIONS requests
+  // Handle OPTIONS preflight FIRST with headers in writeHead
   if (req.method === 'OPTIONS') {
-    res.writeHead(204);
+    res.writeHead(200, corsHeaders);
     res.end();
     return;
   }
-  
+
+  // Set CORS headers for all other requests
+  Object.entries(corsHeaders).forEach(([key, value]) => {
+    res.setHeader(key, value);
+  });
+
   if (!dbInitialized) {
     await initDatabase();
     dbInitialized = true;
   }
-  
+
   return yoga(req, res);
 };
