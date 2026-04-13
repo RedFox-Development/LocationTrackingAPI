@@ -17,12 +17,7 @@ const schema = createSchema({
 const yoga = createYoga({
   schema,
   graphqlEndpoint: '/api',
-  cors: {
-    origin: true, // Allow any origin (can be restricted later)
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-    methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE'],
-  },
+  cors: true, // Enable CORS
   landingPage: false, // Disable landing page in production
   graphiql: false, // Disable GraphiQL in production
 });
@@ -30,10 +25,30 @@ const yoga = createYoga({
 // Initialize database tables on first request
 let dbInitialized = false;
 
+// CORS middleware
+const setCorsHeaders = (res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, HEAD, DELETE, PUT, PATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Accept-Language, Content-Language, X-Requested-With');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+};
+
 export default async (req, res) => {
+  // Set CORS headers immediately
+  setCorsHeaders(res);
+  
+  // Handle OPTIONS requests
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+  
   if (!dbInitialized) {
     await initDatabase();
     dbInitialized = true;
   }
+  
   return yoga(req, res);
 };
