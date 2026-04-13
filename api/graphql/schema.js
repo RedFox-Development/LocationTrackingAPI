@@ -17,6 +17,7 @@ export const typeDefs = `
     logo_data: String
     logo_mime_type: String
     organization_name: String
+    api_url: String
     expiration_date: DateTime
     timezone: String
     timeframe_start: DateTime
@@ -168,6 +169,7 @@ export const typeDefs = `
       expiration_date: DateTime
       timezone: String
       update_frequency: Int
+      api_url: String
       start_date: String
       end_date: String
     ): Event!
@@ -302,6 +304,13 @@ export const typeDefs = `
       event_id: Int!
       keycode: String!
       update_frequency: Int!
+    ): Event!
+    
+    # Update event API URL (requires authentication)
+    updateEventApiUrl(
+      event_id: Int!
+      keycode: String!
+      api_url: String!
     ): Event!
     
     # Cleanup expired data (internal/admin use)

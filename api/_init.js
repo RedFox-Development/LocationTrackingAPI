@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS events (
     logo_mime_type VARCHAR(50),
   geofence_data TEXT,
     organization_name VARCHAR(255),
+    api_url VARCHAR(500),
     expiration_date TIMESTAMPTZ,
     timezone VARCHAR(100) NOT NULL DEFAULT 'UTC',
     start_date TIMESTAMPTZ,

@@ -18,9 +18,10 @@ const yoga = createYoga({
   schema,
   graphqlEndpoint: '/api',
   cors: {
-    origin: '*',
+    origin: true, // Allow any origin (can be restricted later)
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE'],
   },
   landingPage: false, // Disable landing page in production
   graphiql: false, // Disable GraphiQL in production
