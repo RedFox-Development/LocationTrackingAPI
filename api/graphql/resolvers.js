@@ -232,10 +232,11 @@ export const resolvers = {
 
       const event = {
         ...eventRow,
-        // Never leak the manage keycode to view-only or field sessions.
+        // Never leak the manage keycode to view-only sessions.
+        // Return field_keycode if user has field or manage access.
         keycode: isManageAccess ? eventRow.keycode : '',
         view_keycode: isManageAccess ? eventRow.view_keycode : '',
-        field_keycode: isManageAccess ? eventRow.field_keycode : '',
+        field_keycode: (isManageAccess || isFieldAccess) ? eventRow.field_keycode : '',
         access_level: accessLevel,
       };
 
