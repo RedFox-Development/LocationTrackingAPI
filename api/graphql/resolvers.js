@@ -163,7 +163,7 @@ export const resolvers = {
     // Get a specific event
     event: async (_, { id }) => {
       const result = await query(
-        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, COALESCE(update_frequency, 10000) AS update_frequency
+        `SELECT id, name, '' AS keycode, '' AS view_keycode, '' AS field_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, COALESCE(update_frequency, 10000) AS update_frequency
          FROM events
          WHERE id = $1`,
         [id]
@@ -175,7 +175,7 @@ export const resolvers = {
     // Note: Does not return keycode for security
     eventByName: async (_, { event_name }) => {
       const result = await query(
-        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, COALESCE(update_frequency, 10000) AS update_frequency
+        `SELECT id, name, '' AS keycode, '' AS view_keycode, '' AS field_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, COALESCE(update_frequency, 10000) AS update_frequency
          FROM events
          WHERE name = $1`,
         [event_name]
@@ -213,11 +213,11 @@ export const resolvers = {
     login: async (_, { event_name, keycode }) => {
       const normalizedKeycode = String(keycode || '').trim().toUpperCase();
 
-      // Find event by name and either management or view-only keycode.
+      // Find event by name and either management, view-only, or field keycode.
       const eventResult = await query(
-        `SELECT id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, COALESCE(update_frequency, 10000) AS update_frequency
+        `SELECT id, name, keycode, view_keycode, field_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, COALESCE(update_frequency, 10000) AS update_frequency
          FROM events
-         WHERE name = $1 AND (UPPER(keycode) = $2 OR UPPER(view_keycode) = $2)`,
+         WHERE name = $1 AND (UPPER(keycode) = $2 OR UPPER(view_keycode) = $2 OR UPPER(field_keycode) = $2)`,
         [event_name, normalizedKeycode]
       );
 
@@ -227,13 +227,15 @@ export const resolvers = {
 
       const eventRow = eventResult.rows[0];
       const isManageAccess = String(eventRow.keycode || '').toUpperCase() === normalizedKeycode;
-      const accessLevel = isManageAccess ? 'manage' : 'view';
+      const isFieldAccess = String(eventRow.field_keycode || '').toUpperCase() === normalizedKeycode;
+      const accessLevel = isManageAccess ? 'manage' : isFieldAccess ? 'field' : 'view';
 
       const event = {
         ...eventRow,
-        // Never leak the manage keycode to view-only sessions.
+        // Never leak the manage keycode to view-only or field sessions.
         keycode: isManageAccess ? eventRow.keycode : '',
-        view_keycode: eventRow.view_keycode,
+        view_keycode: isManageAccess ? eventRow.view_keycode : '',
+        field_keycode: isManageAccess ? eventRow.field_keycode : '',
         access_level: accessLevel,
       };
 
@@ -258,7 +260,7 @@ export const resolvers = {
     exportEventData: async (_, { event_id, keycode, startDate, endDate }) => {
       // Authenticate
       const eventResult = await query(
-        `SELECT id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data
+        `SELECT id, name, keycode, view_keycode, field_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data
          FROM events
          WHERE id = $1 AND keycode = $2`,
         [event_id, keycode]
@@ -490,12 +492,13 @@ export const resolvers = {
 
       const keycode = generateKeycode();
       const viewKeycode = generateKeycode();
+      const fieldKeycode = generateKeycode();
       
       const result = await query(
-        `INSERT INTO events (name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, update_frequency)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, update_frequency`,
-        [name, keycode, viewKeycode, image_data || null, image_mime_type || null, logo_data || null, logo_mime_type || null, organization_name || null, normalizedExpiration, timezone || 'UTC', frequency]
+        `INSERT INTO events (name, keycode, view_keycode, field_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, update_frequency)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         RETURNING id, name, keycode, view_keycode, field_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, update_frequency`,
+        [name, keycode, viewKeycode, fieldKeycode, image_data || null, image_mime_type || null, logo_data || null, logo_mime_type || null, organization_name || null, normalizedExpiration, timezone || 'UTC', frequency]
       );
       
       return { ...result.rows[0], access_level: 'manage' };
@@ -1167,7 +1170,7 @@ export const resolvers = {
   Team: {
     event: async (parent) => {
       const result = await query(
-        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data
+        `SELECT id, name, '' AS keycode, '' AS view_keycode, '' AS field_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data
          FROM events
          WHERE id = $1`,
         [parent.event_id]

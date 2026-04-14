@@ -11,6 +11,7 @@ export const typeDefs = `
     name: String!
     keycode: String!
     view_keycode: String!
+    field_keycode: String!
     access_level: String
     image_data: String
     image_mime_type: String
@@ -23,6 +24,7 @@ export const typeDefs = `
     timeframe_end: DateTime
     geofence_data: String
     update_frequency: Int
+    api_url: String
     teams: [Team!]!
   }
 
