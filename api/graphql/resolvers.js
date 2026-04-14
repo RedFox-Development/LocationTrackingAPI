@@ -132,6 +132,7 @@ export const resolvers = {
   Query: {
     // Get teams for an event
     teams: async (_, { event_id }) => {
+      console.log('[GraphQL] Query.teams called with event_id:', event_id);
       const result = await query(
         `SELECT id, event_id, name, color, activated
          FROM teams
@@ -139,6 +140,7 @@ export const resolvers = {
          ORDER BY name ASC`,
         [event_id]
       );
+      console.log('[GraphQL] Query.teams returning', result.rows.length, 'teams:', result.rows.map(t => ({ id: t.id, name: t.name, event_id: t.event_id })));
       return result.rows;
     },
 
@@ -1180,6 +1182,7 @@ export const resolvers = {
     },
 
     updates: async (parent) => {
+      console.log('[GraphQL] Team.updates called for team:', parent.name);
       const result = await query(
         `SELECT id, team, event, lat, lon, timestamp
          FROM location_updates
@@ -1188,6 +1191,7 @@ export const resolvers = {
          LIMIT 20`,
         [parent.name]
       );
+      console.log('[GraphQL] Team.updates for team', parent.name, 'returning', result.rows.length, 'updates');
       return result.rows.map(r => ({
         ...r,
         lat: parseFloat(r.lat),
