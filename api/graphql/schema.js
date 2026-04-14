@@ -88,6 +88,58 @@ export const typeDefs = `
     lon: Float!
   }
 
+  # Analytics Types
+  type TeamMetrics {
+    team_id: Int!
+    team_name: String!
+    team_color: String!
+    total_distance_m: Int!
+    avg_speed_kmh: Float!
+    max_speed_kmh: Float!
+    active_duration_s: Int!
+    stationary_duration_s: Int!
+    num_updates: Int!
+    start_time: String
+    end_time: String
+  }
+
+  type DwellPoint {
+    latitude: Float!
+    longitude: Float!
+    duration_minutes: Float!
+    cluster_size: Int!
+    first_update: String
+    last_update: String
+  }
+
+  type HeatmapCell {
+    latitude: Float!
+    longitude: Float!
+    update_count: Int!
+    intensity: Float!
+  }
+
+  type Coordinates {
+    latitude: Float!
+    longitude: Float!
+  }
+
+  type EventHeatmap {
+    grid_cells: [HeatmapCell!]!
+    num_cells: Int!
+    max_intensity: Float!
+    min_intensity: Float!
+    total_non_stationary_updates: Int!
+    event_centroid: Coordinates
+    cellSizeMeters: Int!
+  }
+
+  type EventAnalytics {
+    team_metrics: [TeamMetrics!]!
+    dwell_points_by_team: String!
+    heatmap: EventHeatmap!
+  }
+
   # Login response
   type LoginResponse {
     success: Boolean!
@@ -151,6 +203,9 @@ export const typeDefs = `
 
     # Get waypoint visits for an event
     waypointVisits(event_id: Int!): [WaypointVisit!]!
+
+    # Get event analytics (requires authentication)
+    eventAnalytics(event_id: Int!, keycode: String!): EventAnalytics!
   }
 
   # Mutations

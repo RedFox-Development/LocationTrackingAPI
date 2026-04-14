@@ -4,6 +4,11 @@
 
 import { query } from '../_db.js';
 import { generateKeycode } from '../_utils.js';
+import {
+  computeTeamMetrics,
+  identifyStationaryPoints,
+  computeEventHeatmap,
+} from '../analytics.js';
 import { GraphQLScalarType, Kind } from 'graphql';
 
 const WAYPOINT_VISIT_RADIUS_METERS = 15;
@@ -381,6 +386,94 @@ export const resolvers = {
         lon: parseFloat(row.lon),
         visited_at: toIsoDateTime(row.visited_at),
       }));
+    },
+
+    // Get event analytics
+    eventAnalytics: async (_, { event_id, keycode }) => {
+      // Verify authentication
+      const eventResult = await query(
+        'SELECT id FROM events WHERE id = $1 AND keycode = $2',
+        [event_id, keycode]
+      );
+
+      if (eventResult.rows.length === 0) {
+        throw new Error('Invalid event ID or keycode');
+      }
+
+      // Get all location updates for this event with team info
+      const updatesResult = await query(
+        `SELECT t.id as team_id, t.name as team_name, t.color as team_color, 
+                l.lat, l.lon, l.timestamp
+         FROM location_updates l
+         JOIN teams t ON t.name = l.team
+         WHERE t.event_id = $1
+         ORDER BY l.timestamp ASC`,
+        [event_id]
+      );
+
+      const updates = updatesResult.rows.map((row) => ({
+        team_id: row.team_id,
+        team_name: row.team_name,
+        team_color: row.team_color,
+        lat: parseFloat(row.lat),
+        lon: parseFloat(row.lon),
+        timestamp: row.timestamp,
+      }));
+
+      if (updates.length === 0) {
+        return {
+          team_metrics: [],
+          dwell_points_by_team: '{}',
+          heatmap: {
+            grid_cells: [],
+            num_cells: 0,
+            max_intensity: 0,
+            min_intensity: 0,
+            total_non_stationary_updates: 0,
+            event_centroid: null,
+            cellSizeMeters: 100,
+          },
+        };
+      }
+
+      // Group updates by team
+      const updatesByTeam = new Map();
+      updates.forEach((update) => {
+        if (!updatesByTeam.has(update.team_id)) {
+          updatesByTeam.set(update.team_id, {
+            team_id: update.team_id,
+            team_name: update.team_name,
+            team_color: update.team_color,
+            updates: [],
+          });
+        }
+        updatesByTeam.get(update.team_id).updates.push({
+          lat: update.lat,
+          lon: update.lon,
+          timestamp: update.timestamp,
+        });
+      });
+
+      // Compute team metrics
+      const teamMetrics = Array.from(updatesByTeam.values()).map((team) =>
+        computeTeamMetrics(team.updates, team.team_id, team.team_name, team.team_color)
+      );
+
+      // Compute dwell points by team
+      const dwellPointsByTeam = {};
+      for (const [teamId, team] of updatesByTeam.entries()) {
+        const dwellResult = identifyStationaryPoints(team.updates);
+        dwellPointsByTeam[teamId] = dwellResult.dwell_points;
+      }
+
+      // Compute event-wide heatmap
+      const heatmap = computeEventHeatmap(updates);
+
+      return {
+        team_metrics: teamMetrics,
+        dwell_points_by_team: JSON.stringify(dwellPointsByTeam),
+        heatmap,
+      };
     },
   },
 
