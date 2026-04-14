@@ -163,7 +163,7 @@ export const resolvers = {
     // Get a specific event
     event: async (_, { id }) => {
       const result = await query(
-        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, update_frequency
+        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, COALESCE(update_frequency, 10000) AS update_frequency
          FROM events
          WHERE id = $1`,
         [id]
@@ -175,7 +175,7 @@ export const resolvers = {
     // Note: Does not return keycode for security
     eventByName: async (_, { event_name }) => {
       const result = await query(
-        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, update_frequency
+        `SELECT id, name, '' AS keycode, '' AS view_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, COALESCE(update_frequency, 10000) AS update_frequency
          FROM events
          WHERE name = $1`,
         [event_name]
@@ -198,7 +198,7 @@ export const resolvers = {
            e.logo_data,
            e.logo_mime_type,
            e.organization_name,
-           e.update_frequency
+           COALESCE(e.update_frequency, 10000) AS update_frequency
          FROM teams t
          INNER JOIN events e ON e.id = t.event_id
          WHERE e.name = $1 AND t.name = $2
@@ -215,7 +215,7 @@ export const resolvers = {
 
       // Find event by name and either management or view-only keycode.
       const eventResult = await query(
-        `SELECT id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, update_frequency
+        `SELECT id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, COALESCE(update_frequency, 10000) AS update_frequency
          FROM events
          WHERE name = $1 AND (UPPER(keycode) = $2 OR UPPER(view_keycode) = $2)`,
         [event_name, normalizedKeycode]
