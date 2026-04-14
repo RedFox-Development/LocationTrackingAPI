@@ -1185,7 +1185,7 @@ export const resolvers = {
          FROM location_updates
          WHERE team = $1
          ORDER BY timestamp DESC
-         LIMIT 100`,
+         LIMIT 20`,
         [parent.name]
       );
       return result.rows.map(r => ({
