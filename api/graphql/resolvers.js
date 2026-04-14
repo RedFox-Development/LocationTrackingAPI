@@ -133,6 +133,12 @@ export const resolvers = {
     // Get teams for an event
     teams: async (_, { event_id }) => {
       console.log('[GraphQL] Query.teams called with event_id:', event_id);
+      
+      if (!event_id) {
+        console.warn('[GraphQL] Query.teams called with missing event_id');
+        return [];
+      }
+      
       const result = await query(
         `SELECT id, event_id, name, color, activated
          FROM teams
@@ -347,6 +353,7 @@ export const resolvers = {
 
     // Get waypoints for an event
     waypoints: async (_, { event_id }) => {
+      console.log('[GraphQL] Query.waypoints called with event_id:', event_id);
       const result = await query(
         `SELECT id, event_id, name, lat, lon, is_required, created_at
          FROM waypoints
@@ -355,6 +362,7 @@ export const resolvers = {
         [event_id]
       );
 
+      console.log('[GraphQL] Query.waypoints returning', result.rows.length, 'waypoints');
       return result.rows.map((row) => ({
         ...row,
         lat: parseFloat(row.lat),
