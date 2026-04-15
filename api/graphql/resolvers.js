@@ -703,11 +703,12 @@ export const resolvers = {
         throw new Error('Invalid event ID or keycode');
       }
 
+      const normalizedType = String(type || 'CHECKPOINT').toUpperCase();
       const result = await query(
         `INSERT INTO waypoints (event_id, name, lat, lon, type, point_value, is_required)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id, event_id, name, lat, lon, type, point_value, is_required, created_at`,
-        [event_id, name, lat, lon, type, pointValue, is_required]
+        [event_id, name, lat, lon, normalizedType, pointValue, is_required]
       );
 
       const row = result.rows[0];
@@ -751,7 +752,7 @@ export const resolvers = {
       const nextLon = typeof lon === 'number' && Number.isFinite(lon)
         ? lon
         : parseFloat(currentWaypoint.lon);
-      const nextType = typeof type === 'string' ? type : currentWaypoint.type;
+      const nextType = typeof type === 'string' ? type.toUpperCase() : currentWaypoint.type;
       const nextPointValue = typeof pointValue === 'number' ? pointValue : currentWaypoint.point_value;
 
       const result = await query(
