@@ -50,8 +50,11 @@ CREATE TABLE IF NOT EXISTS waypoints (
     name VARCHAR(255) NOT NULL,
     lat DECIMAL(10, 8) NOT NULL,
     lon DECIMAL(11, 8) NOT NULL,
+    type VARCHAR(20) DEFAULT 'CHECKPOINT' NOT NULL,
+    point_value INTEGER DEFAULT 0 NOT NULL,
     is_required BOOLEAN NOT NULL DEFAULT false,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    CHECK (type IN ('START', 'CHECKPOINT', 'END'))
 );
 
 -- Waypoint visits table: tracks first visit per team/waypoint

@@ -65,6 +65,11 @@ export const typeDefs = `
     timestamp: String!
   }
 
+  enum WaypointType {
+    START
+    END
+    CHECKPOINT
+  }
   # Waypoint - Checkpoint in an event
   type Waypoint {
     id: Int!
@@ -72,6 +77,8 @@ export const typeDefs = `
     name: String!
     lat: Float!
     lon: Float!
+    type: WaypointType!
+    pointValue: Int!
     is_required: Boolean!
     created_at: String
   }
@@ -333,6 +340,8 @@ export const typeDefs = `
       name: String!
       lat: Float!
       lon: Float!
+      type: String
+      pointValue: Int
       is_required: Boolean
     ): Waypoint!
 
@@ -345,6 +354,8 @@ export const typeDefs = `
       is_required: Boolean
       lat: Float
       lon: Float
+      type: String
+      pointValue: Int
     ): Waypoint!
 
     # Delete a waypoint (requires authentication)

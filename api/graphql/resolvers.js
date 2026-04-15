@@ -355,7 +355,7 @@ export const resolvers = {
     waypoints: async (_, { event_id }) => {
       console.log('[GraphQL] Query.waypoints called with event_id:', event_id);
       const result = await query(
-        `SELECT id, event_id, name, lat, lon, is_required, created_at
+        `SELECT id, event_id, name, lat, lon, type, point_value, is_required, created_at
          FROM waypoints
          WHERE event_id = $1
          ORDER BY created_at ASC, id ASC`,
@@ -367,6 +367,7 @@ export const resolvers = {
         ...row,
         lat: parseFloat(row.lat),
         lon: parseFloat(row.lon),
+        pointValue: row.point_value,
         created_at: toIsoDateTime(row.created_at),
       }));
     },
@@ -691,7 +692,7 @@ export const resolvers = {
     },
 
     // Create a waypoint (requires authentication)
-    createWaypoint: async (_, { event_id, keycode, name, lat, lon, is_required = false }) => {
+    createWaypoint: async (_, { event_id, keycode, name, lat, lon, type = 'CHECKPOINT', pointValue = 0, is_required = false }) => {
       const verifyResult = await query(
         `SELECT id FROM events WHERE id = $1 AND keycode = $2`,
         [event_id, keycode]
@@ -702,10 +703,10 @@ export const resolvers = {
       }
 
       const result = await query(
-        `INSERT INTO waypoints (event_id, name, lat, lon, is_required)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, event_id, name, lat, lon, is_required, created_at`,
-        [event_id, name, lat, lon, is_required]
+        `INSERT INTO waypoints (event_id, name, lat, lon, type, point_value, is_required)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id, event_id, name, lat, lon, type, point_value, is_required, created_at`,
+        [event_id, name, lat, lon, type, pointValue, is_required]
       );
 
       const row = result.rows[0];
@@ -713,12 +714,13 @@ export const resolvers = {
         ...row,
         lat: parseFloat(row.lat),
         lon: parseFloat(row.lon),
+        pointValue: row.point_value,
         created_at: toIsoDateTime(row.created_at),
       };
     },
 
     // Update a waypoint (requires authentication)
-    updateWaypoint: async (_, { waypoint_id, event_id, keycode, name, is_required, lat, lon }) => {
+    updateWaypoint: async (_, { waypoint_id, event_id, keycode, name, is_required, lat, lon, type, pointValue }) => {
       const verifyResult = await query(
         `SELECT id FROM events WHERE id = $1 AND keycode = $2`,
         [event_id, keycode]
@@ -729,7 +731,7 @@ export const resolvers = {
       }
 
       const waypointVerifyResult = await query(
-        `SELECT id, name, is_required, lat, lon
+        `SELECT id, name, is_required, lat, lon, type, point_value
          FROM waypoints
          WHERE id = $1 AND event_id = $2`,
         [waypoint_id, event_id]
@@ -748,13 +750,15 @@ export const resolvers = {
       const nextLon = typeof lon === 'number' && Number.isFinite(lon)
         ? lon
         : parseFloat(currentWaypoint.lon);
+      const nextType = typeof type === 'string' ? type : currentWaypoint.type;
+      const nextPointValue = typeof pointValue === 'number' ? pointValue : currentWaypoint.point_value;
 
       const result = await query(
         `UPDATE waypoints
-         SET name = $1, is_required = $2, lat = $3, lon = $4
-         WHERE id = $5
-         RETURNING id, event_id, name, lat, lon, is_required, created_at`,
-        [nextName, nextRequired, nextLat, nextLon, waypoint_id]
+         SET name = $1, is_required = $2, lat = $3, lon = $4, type = $5, point_value = $6
+         WHERE id = $7
+         RETURNING id, event_id, name, lat, lon, type, point_value, is_required, created_at`,
+        [nextName, nextRequired, nextLat, nextLon, nextType, nextPointValue, waypoint_id]
       );
 
       const row = result.rows[0];
@@ -762,6 +766,7 @@ export const resolvers = {
         ...row,
         lat: parseFloat(row.lat),
         lon: parseFloat(row.lon),
+        pointValue: row.point_value,
         created_at: toIsoDateTime(row.created_at),
       };
     },
@@ -780,7 +785,7 @@ export const resolvers = {
       const waypointResult = await query(
         `DELETE FROM waypoints
          WHERE id = $1 AND event_id = $2
-         RETURNING id, event_id, name, lat, lon, is_required, created_at`,
+         RETURNING id, event_id, name, lat, lon, type, point_value, is_required, created_at`,
         [waypoint_id, event_id]
       );
 
