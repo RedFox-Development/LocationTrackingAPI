@@ -282,7 +282,7 @@ export const resolvers = {
       const event = eventResult.rows[0];
 
       const waypointsResult = await query(
-        `SELECT id, event_id, name, lat, lon, is_required, created_at
+        `SELECT id, event_id, name, lat, lon, type, point_value, is_required, created_at
          FROM waypoints
          WHERE event_id = $1
          ORDER BY created_at ASC, id ASC`,
@@ -293,6 +293,7 @@ export const resolvers = {
         ...row,
         lat: parseFloat(row.lat),
         lon: parseFloat(row.lon),
+        pointValue: row.point_value,
         created_at: toIsoDateTime(row.created_at),
       }));
 
@@ -798,6 +799,7 @@ export const resolvers = {
         ...row,
         lat: parseFloat(row.lat),
         lon: parseFloat(row.lon),
+        pointValue: row.point_value,
         created_at: toIsoDateTime(row.created_at),
       };
     },
