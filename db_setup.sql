@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS location_updates (
     event VARCHAR(255) NOT NULL REFERENCES events(name) ON DELETE CASCADE,
     lat DECIMAL(10, 8) NOT NULL,
     lon DECIMAL(11, 8) NOT NULL,
-    timestamp TIMESTAMP NOT NULL
+    timestamp TIMESTAMP NOT NULL,
+    is_anomaly BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- Waypoints table: stores event checkpoints
@@ -81,6 +82,8 @@ CREATE INDEX IF NOT EXISTS idx_waypoints_event_id ON waypoints(event_id);
 CREATE INDEX IF NOT EXISTS idx_waypoint_visits_waypoint_id ON waypoint_visits(waypoint_id);
 CREATE INDEX IF NOT EXISTS idx_waypoint_visits_team_id ON waypoint_visits(team_id);
 CREATE INDEX IF NOT EXISTS idx_location_updates_team_timestamp ON location_updates(team, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_location_updates_not_anomaly ON location_updates(timestamp DESC) WHERE is_anomaly = FALSE;
+CREATE INDEX IF NOT EXISTS idx_location_updates_anomaly ON location_updates(timestamp DESC) WHERE is_anomaly = TRUE;
 
 -- Comments
 COMMENT ON TABLE events IS 'Tracking events with authentication';

@@ -332,6 +332,17 @@ export const resolvers = {
           [event.id]
         );
 
+        // Debug: Check what's in location_updates for this event
+        try {
+          const totalLocationsResult = await query(
+            `SELECT DISTINCT team, event, COUNT(*) as count FROM location_updates WHERE event = $1 GROUP BY team, event`,
+            [event.name]
+          );
+          console.log('[exportEventData] Total locations by team for event', event.name, ':', totalLocationsResult.rows);
+        } catch (debugErr) {
+          console.log('[exportEventData] Could not get location summary:', debugErr.message);
+        }
+
         // Get location history for each team (with optional date filtering)
         const teams = await Promise.all(
           teamsResult.rows.map(async (team) => {
@@ -339,7 +350,7 @@ export const resolvers = {
               let locationQuery = `
                 SELECT id, team, event, lat, lon, timestamp
                 FROM location_updates
-                WHERE team = $1 AND event = $2`;
+                WHERE team = $1 AND event = $2 AND is_anomaly = FALSE`;
               
               const params = [team.name, event.name];
               
@@ -366,6 +377,13 @@ export const resolvers = {
               });
               const locationResult = await query(locationQuery, params);
               console.log('[exportEventData] Team', team.name, 'returned', locationResult.rows.length, 'locations');
+              
+              // Log first and last location for verification
+              if (locationResult.rows.length > 0) {
+                const first = locationResult.rows[0];
+                const last = locationResult.rows[locationResult.rows.length - 1];
+                console.log('[exportEventData] Sample locations - First:', { team: first.team, event: first.event, timestamp: first.timestamp }, 'Last:', { team: last.team, event: last.event, timestamp: last.timestamp });
+              }
               
               // Debug: If no locations found, check what's actually in the database
               if (locationResult.rows.length === 0) {
@@ -676,11 +694,49 @@ export const resolvers = {
           throw new Error('Team not found for this event');
         }
 
+        // Check for anomalies by comparing with previous location
+        let isAnomaly = false;
+        try {
+          const previousLocationResult = await query(
+            `SELECT lat, lon, timestamp
+             FROM location_updates
+             WHERE team = $1 AND event = $2
+             ORDER BY timestamp DESC
+             LIMIT 1`,
+            [team, event]
+          );
+
+          if (previousLocationResult.rows.length > 0) {
+            const prevLoc = previousLocationResult.rows[0];
+            const distance = haversineDistanceMeters(
+              parseFloat(prevLoc.lat),
+              parseFloat(prevLoc.lon),
+              parseFloat(lat),
+              parseFloat(lon)
+            );
+
+            const timeDiffS = (new Date(timestamp || new Date().toISOString()).getTime() - new Date(prevLoc.timestamp).getTime()) / 1000;
+
+            const MAX_SPEED_MPS = 60; // 216 km/h
+            const MAX_JUMP_DISTANCE_M = 1000; // 1 km
+            const MAX_JUMP_TIME_S = 60; // within 60 seconds
+
+            const speedMps = timeDiffS > 0 ? distance / timeDiffS : 0;
+            isAnomaly = speedMps > MAX_SPEED_MPS || (distance > MAX_JUMP_DISTANCE_M && timeDiffS < MAX_JUMP_TIME_S);
+
+            if (isAnomaly) {
+              console.log('[createLocationUpdate] Anomaly detected for team', team, ': distance=', distance, 'm, time=', timeDiffS, 's, speed=', speedMps, 'm/s');
+            }
+          }
+        } catch (anomalyErr) {
+          console.warn('[createLocationUpdate] Anomaly check failed (non-blocking):', anomalyErr.message);
+        }
+
         const result = await query(
-          `INSERT INTO location_updates (team, event, lat, lon, timestamp)
-           VALUES ($1, $2, $3, $4, $5)
-           RETURNING id, team, event, lat, lon, timestamp`,
-          [team, event, lat, lon, timestamp || new Date().toISOString()]
+          `INSERT INTO location_updates (team, event, lat, lon, timestamp, is_anomaly)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING id, team, event, lat, lon, timestamp, is_anomaly`,
+          [team, event, lat, lon, timestamp || new Date().toISOString(), isAnomaly]
         );
 
         // Best-effort waypoint visit detection. Failures here should never block location ingestion.
