@@ -140,10 +140,11 @@ export const resolvers = {
       }
       
       const result = await query(
-        `SELECT id, event_id, name, color, activated
-         FROM teams
-         WHERE event_id = $1
-         ORDER BY name ASC`,
+        `SELECT t.id, t.event_id, t.name, t.color, t.activated, e.name AS _event_name
+         FROM teams t
+         INNER JOIN events e ON e.id = t.event_id
+         WHERE t.event_id = $1
+         ORDER BY t.name ASC`,
         [event_id]
       );
       console.log('[GraphQL] Query.teams returning', result.rows.length, 'teams:', result.rows.map(t => ({ id: t.id, name: t.name, event_id: t.event_id })));
@@ -1321,10 +1322,11 @@ export const resolvers = {
   Event: {
     teams: async (parent) => {
       const result = await query(
-        `SELECT id, event_id, name, color, activated
-         FROM teams
-         WHERE event_id = $1
-         ORDER BY name ASC`,
+        `SELECT t.id, t.event_id, t.name, t.color, t.activated, e.name AS _event_name
+         FROM teams t
+         INNER JOIN events e ON e.id = t.event_id
+         WHERE t.event_id = $1
+         ORDER BY t.name ASC`,
         [parent.id]
       );
       return result.rows;
@@ -1344,16 +1346,27 @@ export const resolvers = {
 
     updates: async (parent, args = {}) => {
       const limit = Math.min(parseInt(args.limit) || 100, 1000); // Cap at 1000 to prevent abuse
-      console.log('[GraphQL] Team.updates called for team:', parent.name, 'limit:', limit);
+      const eventName = parent._event_name;
       const result = await query(
-        `SELECT id, team, event, lat, lon, timestamp
-         FROM location_updates
-         WHERE team = $1
-         ORDER BY timestamp DESC
-         LIMIT $2`,
-        [parent.name, limit]
+        eventName
+          ? `SELECT id, team, event, lat, lon, timestamp
+             FROM location_updates
+             WHERE team = $1
+               AND event = $2
+             ORDER BY timestamp DESC
+             LIMIT $3`
+          : `SELECT id, team, event, lat, lon, timestamp
+             FROM location_updates
+             WHERE team = $1
+               AND event = (
+                 SELECT name
+                 FROM events
+                 WHERE id = $2
+               )
+             ORDER BY timestamp DESC
+             LIMIT $3`,
+        eventName ? [parent.name, eventName, limit] : [parent.name, parent.event_id, limit]
       );
-      console.log('[GraphQL] Team.updates for team', parent.name, 'returning', result.rows.length, 'updates (limit was:', limit, ')');
       return result.rows.map(r => ({
         ...r,
         lat: parseFloat(r.lat),
