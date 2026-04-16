@@ -162,6 +162,7 @@ export const typeDefs = `
     event: Event!
     teams: [TeamExport!]!
     waypoints: [Waypoint!]!
+    analytics: EventAnalytics
     startDate: String
     endDate: String
   }

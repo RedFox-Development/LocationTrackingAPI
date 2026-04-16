@@ -367,6 +367,20 @@ export const resolvers = {
               const locationResult = await query(locationQuery, params);
               console.log('[exportEventData] Team', team.name, 'returned', locationResult.rows.length, 'locations');
               
+              // Debug: If no locations found, check what's actually in the database
+              if (locationResult.rows.length === 0) {
+                try {
+                  const debugQuery = `
+                    SELECT COUNT(*) as total_count, COUNT(DISTINCT team) as unique_teams, COUNT(DISTINCT event) as unique_events
+                    FROM location_updates
+                    WHERE team ILIKE $1 OR event ILIKE $2`;
+                  const debugResult = await query(debugQuery, [`%${team.name}%`, `%${event.name}%`]);
+                  console.log('[exportEventData] Debug info for', team.name, ':', debugResult.rows[0]);
+                } catch (debugErr) {
+                  console.log('[exportEventData] Debug query failed:', debugErr.message);
+                }
+              }
+              
               return {
                 id: team.id,
                 name: team.name,
@@ -397,10 +411,23 @@ export const resolvers = {
         
         console.log('[exportEventData] Teams loaded:', teams.length, 'with location counts:', teams.map(t => `${t.name}:${t.locationCount}`).join(','));
 
+        // Fetch analytics data
+        let analytics = null;
+        try {
+          console.log('[exportEventData] Computing analytics for event');
+          const analyticsQuery = resolvers.Query.eventAnalytics;
+          analytics = await analyticsQuery(_, { event_id: event.id, keycode });
+          console.log('[exportEventData] Analytics computed successfully');
+        } catch (analyticsErr) {
+          console.warn('[exportEventData] Failed to compute analytics:', analyticsErr.message);
+          // Analytics is optional, don't block export
+        }
+
         const result = {
           event,
           teams,
           waypoints,
+          analytics,
           startDate: startDate || null,
           endDate: endDate || null,
         };
