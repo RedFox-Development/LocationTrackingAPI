@@ -1342,17 +1342,17 @@ export const resolvers = {
       return result.rows[0] || null;
     },
 
-    updates: async (parent) => {
-      console.log('[GraphQL] Team.updates called for team:', parent.name);
+    updates: async (parent, { limit = 100 } = {}) => {
+      console.log('[GraphQL] Team.updates called for team:', parent.name, 'limit:', limit);
       const result = await query(
         `SELECT id, team, event, lat, lon, timestamp
          FROM location_updates
          WHERE team = $1
          ORDER BY timestamp DESC
-         LIMIT 20`,
-        [parent.name]
+         LIMIT $2`,
+        [parent.name, limit]
       );
-      console.log('[GraphQL] Team.updates for team', parent.name, 'returning', result.rows.length, 'updates');
+      console.log('[GraphQL] Team.updates for team', parent.name, 'returning', result.rows.length, 'updates (limit was:', limit, ')');
       return result.rows.map(r => ({
         ...r,
         lat: parseFloat(r.lat),
