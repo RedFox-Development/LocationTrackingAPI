@@ -190,6 +190,9 @@ export const typeDefs = `
     # Get teams for an event
     teams(event_id: Int!): [Team!]!
 
+    # Get teams with bounded location updates for an event
+    teamsWithUpdates(event_id: Int!, limit: Int): [Team!]!
+
     # Get location updates for a team in an event
     updates(event: String!, team: String!, limit: Int): [LocationUpdate!]!
     
