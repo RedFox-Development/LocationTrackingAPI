@@ -36,7 +36,7 @@ export const typeDefs = `
     color: String!
     activated: Boolean!
     event: Event
-    updates: [LocationUpdate!]!
+    updates(limit: Int): [LocationUpdate!]!
   }
 
   # Setup metadata consumed by mobile app after scanning QR
