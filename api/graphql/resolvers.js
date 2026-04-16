@@ -1342,7 +1342,8 @@ export const resolvers = {
       return result.rows[0] || null;
     },
 
-    updates: async (parent, { limit = 100 } = {}) => {
+    updates: async (parent, args = {}) => {
+      const limit = Math.min(parseInt(args.limit) || 100, 1000); // Cap at 1000 to prevent abuse
       console.log('[GraphQL] Team.updates called for team:', parent.name, 'limit:', limit);
       const result = await query(
         `SELECT id, team, event, lat, lon, timestamp
