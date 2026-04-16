@@ -285,6 +285,27 @@ export const resolvers = {
         const event = eventResult.rows[0];
         console.log('[exportEventData] Event found:', event.name)
 
+        // Validate and parse dates
+        let parsedStartDate = null;
+        let parsedEndDate = null;
+        try {
+          if (startDate) {
+            parsedStartDate = new Date(startDate);
+            if (Number.isNaN(parsedStartDate.getTime())) {
+              throw new Error('Invalid startDate format');
+            }
+          }
+          if (endDate) {
+            parsedEndDate = new Date(endDate);
+            if (Number.isNaN(parsedEndDate.getTime())) {
+              throw new Error('Invalid endDate format');
+            }
+          }
+        } catch (dateErr) {
+          console.error('[exportEventData] Date parsing error:', dateErr.message);
+          throw new Error(`Invalid date format: ${dateErr.message}`);
+        }
+
         const waypointsResult = await query(
           `SELECT id, event_id, name, lat, lon, type, point_value, is_required, created_at
            FROM waypoints
@@ -314,43 +335,58 @@ export const resolvers = {
         // Get location history for each team (with optional date filtering)
         const teams = await Promise.all(
           teamsResult.rows.map(async (team) => {
-            let locationQuery = `
-              SELECT id, team, event, lat, lon, timestamp
-              FROM location_updates
-              WHERE team = $1 AND event = $2`;
-            
-            const params = [team.name, event.name];
-            
-            if (startDate) {
-              locationQuery += ` AND timestamp >= $${params.length + 1}`;
-              params.push(startDate);
+            try {
+              let locationQuery = `
+                SELECT id, team, event, lat, lon, timestamp
+                FROM location_updates
+                WHERE team = $1 AND event = $2`;
+              
+              const params = [team.name, event.name];
+              
+              if (parsedStartDate) {
+                locationQuery += ` AND timestamp >= $${params.length + 1}::timestamp`;
+                params.push(parsedStartDate.toISOString());
+              }
+              
+              if (parsedEndDate) {
+                locationQuery += ` AND timestamp <= $${params.length + 1}::timestamp`;
+                params.push(parsedEndDate.toISOString());
+              }
+              
+              locationQuery += ` ORDER BY timestamp ASC`;
+              
+              console.log('[exportEventData] Querying locations for team:', team.name, 'with query:', locationQuery.substring(0, 100));
+              const locationResult = await query(locationQuery, params);
+              
+              return {
+                id: team.id,
+                name: team.name,
+                color: team.color,
+                locationCount: locationResult.rows.length,
+                locations: locationResult.rows.map(r => ({
+                  id: r.id,
+                  team: r.team,
+                  event: r.event,
+                  lat: parseFloat(r.lat),
+                  lon: parseFloat(r.lon),
+                  timestamp: toIsoDateTime(r.timestamp),
+                })),
+              };
+            } catch (teamErr) {
+              console.error('[exportEventData] Error processing team:', team.name, teamErr.message);
+              // Return team with empty locations on error to avoid blocking entire export
+              return {
+                id: team.id,
+                name: team.name,
+                color: team.color,
+                locationCount: 0,
+                locations: [],
+              };
             }
-            
-            if (endDate) {
-              locationQuery += ` AND timestamp <= $${params.length + 1}`;
-              params.push(endDate);
-            }
-            
-            locationQuery += ` ORDER BY timestamp ASC`;
-            
-            const locationResult = await query(locationQuery, params);
-            
-            return {
-              ...team,
-              locationCount: locationResult.rows.length,
-              locations: locationResult.rows.map(r => ({
-                id: r.id,
-                team: r.team,
-                event: r.event,
-                lat: parseFloat(r.lat),
-                lon: parseFloat(r.lon),
-                timestamp: toIsoDateTime(r.timestamp),
-              })),
-            };
           })
         );
         
-        console.log('[exportEventData] Teams loaded:', teams.length, 'with location counts:', teams.map(t => t.locationCount));
+        console.log('[exportEventData] Teams loaded:', teams.length, 'with location counts:', teams.map(t => `${t.name}:${t.locationCount}`).join(','));
 
         const result = {
           event,
@@ -363,8 +399,8 @@ export const resolvers = {
         console.log('[exportEventData] Export completed successfully');
         return result;
       } catch (err) {
-        console.error('[exportEventData] Error:', err.message);
-        console.error('[exportEventData] Stack:', err.stack);
+        console.error('[exportEventData] Fatal error:', err.message);
+        console.error('[exportEventData] Stack trace:', err.stack);
         throw err;
       }
     },
