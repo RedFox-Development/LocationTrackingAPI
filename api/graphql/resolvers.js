@@ -344,19 +344,28 @@ export const resolvers = {
               const params = [team.name, event.name];
               
               if (parsedStartDate) {
-                locationQuery += ` AND timestamp >= $${params.length + 1}::timestamp`;
-                params.push(parsedStartDate.toISOString());
+                locationQuery += ` AND timestamp >= $${params.length + 1}`;
+                params.push(parsedStartDate);
               }
               
               if (parsedEndDate) {
-                locationQuery += ` AND timestamp <= $${params.length + 1}::timestamp`;
-                params.push(parsedEndDate.toISOString());
+                // Add 1 day to end date to include all of that day
+                const endDatePlusOne = new Date(parsedEndDate);
+                endDatePlusOne.setDate(endDatePlusOne.getDate() + 1);
+                locationQuery += ` AND timestamp < $${params.length + 1}`;
+                params.push(endDatePlusOne);
               }
               
               locationQuery += ` ORDER BY timestamp ASC`;
               
-              console.log('[exportEventData] Querying locations for team:', team.name, 'with query:', locationQuery.substring(0, 100));
+              console.log('[exportEventData] Querying team:', team.name, 'with params:', { 
+                teamName: params[0], 
+                eventName: params[1],
+                startDate: parsedStartDate?.toISOString(),
+                endDate: parsedEndDate?.toISOString()
+              });
               const locationResult = await query(locationQuery, params);
+              console.log('[exportEventData] Team', team.name, 'returned', locationResult.rows.length, 'locations');
               
               return {
                 id: team.id,
@@ -373,7 +382,7 @@ export const resolvers = {
                 })),
               };
             } catch (teamErr) {
-              console.error('[exportEventData] Error processing team:', team.name, teamErr.message);
+              console.error('[exportEventData] Error processing team:', team.name, teamErr.message, teamErr.stack);
               // Return team with empty locations on error to avoid blocking entire export
               return {
                 id: team.id,
