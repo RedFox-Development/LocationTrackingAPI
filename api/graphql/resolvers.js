@@ -267,89 +267,106 @@ export const resolvers = {
 
     // Export event data (requires authentication)
     exportEventData: async (_, { event_id, keycode, startDate, endDate }) => {
-      // Authenticate
-      const eventResult = await query(
-        `SELECT id, name, keycode, view_keycode, field_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data
-         FROM events
-         WHERE id = $1 AND keycode = $2`,
-        [event_id, keycode]
-      );
+      try {
+        console.log('[exportEventData] Starting export for event', event_id, 'with dates:', { startDate, endDate })
+        
+        // Authenticate
+        const eventResult = await query(
+          `SELECT id, name, keycode, view_keycode, field_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data
+           FROM events
+           WHERE id = $1 AND keycode = $2`,
+          [event_id, keycode]
+        );
 
-      if (eventResult.rows.length === 0) {
-        throw new Error('Invalid event ID or keycode');
+        if (eventResult.rows.length === 0) {
+          throw new Error('Invalid event ID or keycode');
+        }
+
+        const event = eventResult.rows[0];
+        console.log('[exportEventData] Event found:', event.name)
+
+        const waypointsResult = await query(
+          `SELECT id, event_id, name, lat, lon, type, point_value, is_required, created_at
+           FROM waypoints
+           WHERE event_id = $1
+           ORDER BY created_at ASC, id ASC`,
+          [event.id]
+        );
+
+        const waypoints = waypointsResult.rows.map((row) => ({
+          ...row,
+          lat: parseFloat(row.lat),
+          lon: parseFloat(row.lon),
+          pointValue: row.point_value,
+          created_at: toIsoDateTime(row.created_at),
+        }));
+        console.log('[exportEventData] Waypoints loaded:', waypoints.length)
+
+        // Get teams for this event
+        const teamsResult = await query(
+          `SELECT id, event_id, name, color, activated
+           FROM teams
+           WHERE event_id = $1
+           ORDER BY name ASC`,
+          [event.id]
+        );
+
+        // Get location history for each team (with optional date filtering)
+        const teams = await Promise.all(
+          teamsResult.rows.map(async (team) => {
+            let locationQuery = `
+              SELECT id, team, event, lat, lon, timestamp
+              FROM location_updates
+              WHERE team = $1 AND event = $2`;
+            
+            const params = [team.name, event.name];
+            
+            if (startDate) {
+              locationQuery += ` AND timestamp >= $${params.length + 1}`;
+              params.push(startDate);
+            }
+            
+            if (endDate) {
+              locationQuery += ` AND timestamp <= $${params.length + 1}`;
+              params.push(endDate);
+            }
+            
+            locationQuery += ` ORDER BY timestamp ASC`;
+            
+            const locationResult = await query(locationQuery, params);
+            
+            return {
+              ...team,
+              locationCount: locationResult.rows.length,
+              locations: locationResult.rows.map(r => ({
+                id: r.id,
+                team: r.team,
+                event: r.event,
+                lat: parseFloat(r.lat),
+                lon: parseFloat(r.lon),
+                timestamp: toIsoDateTime(r.timestamp),
+              })),
+            };
+          })
+        );
+        
+        console.log('[exportEventData] Teams loaded:', teams.length, 'with location counts:', teams.map(t => t.locationCount));
+
+        const result = {
+          event,
+          teams,
+          waypoints,
+          startDate: startDate || null,
+          endDate: endDate || null,
+        };
+        
+        console.log('[exportEventData] Export completed successfully');
+        return result;
+      } catch (err) {
+        console.error('[exportEventData] Error:', err.message);
+        console.error('[exportEventData] Stack:', err.stack);
+        throw err;
       }
-
-      const event = eventResult.rows[0];
-
-      const waypointsResult = await query(
-        `SELECT id, event_id, name, lat, lon, type, point_value, is_required, created_at
-         FROM waypoints
-         WHERE event_id = $1
-         ORDER BY created_at ASC, id ASC`,
-        [event.id]
-      );
-
-      const waypoints = waypointsResult.rows.map((row) => ({
-        ...row,
-        lat: parseFloat(row.lat),
-        lon: parseFloat(row.lon),
-        pointValue: row.point_value,
-        created_at: toIsoDateTime(row.created_at),
-      }));
-
-      // Get teams for this event
-      const teamsResult = await query(
-        `SELECT id, event_id, name, color, activated
-         FROM teams
-         WHERE event_id = $1
-         ORDER BY name ASC`,
-        [event.id]
-      );
-
-      // Get location history for each team (with optional date filtering)
-      const teams = await Promise.all(
-        teamsResult.rows.map(async (team) => {
-          let locationQuery = `
-            SELECT id, team, event, lat, lon, timestamp
-            FROM location_updates
-            WHERE team = $1 AND event = $2`;
-          
-          const params = [team.name, event.name];
-          
-          if (startDate) {
-            locationQuery += ` AND timestamp >= $${params.length + 1}`;
-            params.push(startDate);
-          }
-          
-          if (endDate) {
-            locationQuery += ` AND timestamp <= $${params.length + 1}`;
-            params.push(endDate);
-          }
-          
-          locationQuery += ` ORDER BY timestamp ASC`;
-          
-          const locationResult = await query(locationQuery, params);
-          
-          return {
-            ...team,
-            locationCount: locationResult.rows.length,
-            locations: locationResult.rows.map(r => ({
-              ...r,
-              lat: parseFloat(r.lat),
-              lon: parseFloat(r.lon),
-              timestamp: toIsoDateTime(r.timestamp),
-            })),
-          };
-        })
-      );
-
-      return {
-        event,
-        teams,
-        waypoints,
-        startDate: startDate || null,
-        endDate: endDate || null,
-      };
     },
 
     // Get waypoints for an event
