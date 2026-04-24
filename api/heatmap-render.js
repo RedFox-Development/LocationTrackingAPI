@@ -354,7 +354,7 @@ export const generateTeamPathsExport = async (teamPaths, options = {}) => {
     throw new Error('No team paths provided for export');
   }
 
-  const pixelSize = options.pixelSize ?? 1024;
+  const pixelSize = options.pixelSize ?? 2048;
   const projectedTeams = teamPaths.map((team) => ({
     ...team,
     points: projectTeamPathPoints(team.updates || []),
@@ -399,8 +399,8 @@ export const generateTeamPathsExport = async (teamPaths, options = {}) => {
     const color = team.team_color || '#2563eb';
 
     body.push(`
-      <polyline points="${pathPoints}" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity="0.9" />
-      <circle cx="${endPoint.x.toFixed(2)}" cy="${endPoint.y.toFixed(2)}" r="5" fill="${color}" stroke="#ffffff" stroke-width="2" />
+      <polyline points="${pathPoints}" fill="none" stroke="${color}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.9" />
+      <circle cx="${endPoint.x.toFixed(2)}" cy="${endPoint.y.toFixed(2)}" r="5" fill="${color}" stroke="#ffffff" stroke-width="4" />
     `);
   });
 
@@ -440,7 +440,7 @@ export const generateDwellPointsExport = async (dwellPointsByTeam, options = {})
     throw new Error('No dwell points provided for export');
   }
 
-  const pixelSize = options.pixelSize ?? 1024;
+  const pixelSize = options.pixelSize ?? 2048;
   const bounds = calculateBounds(projectedPoints);
 
   if (!bounds) {
@@ -468,7 +468,7 @@ export const generateDwellPointsExport = async (dwellPointsByTeam, options = {})
     const fill = point.team_color || '#dc2626';
 
     return `
-      <circle cx="${canvasPoint.x.toFixed(2)}" cy="${canvasPoint.y.toFixed(2)}" r="${radius.toFixed(2)}" fill="none" stroke="${fill}" stroke-opacity="0.75" stroke-width="3" />
+      <circle cx="${canvasPoint.x.toFixed(2)}" cy="${canvasPoint.y.toFixed(2)}" r="${radius.toFixed(2)}" fill="none" stroke="${fill}" stroke-opacity="0.75" stroke-width="6" />
     `;
   });
 

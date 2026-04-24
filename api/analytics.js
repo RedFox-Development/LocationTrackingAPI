@@ -192,10 +192,10 @@ export const identifyStationaryPoints = (updates, radiusM = 50, minDurationMin =
 };
 
 /**
- * Generate heatmap grid cells (100m x 100m)
+ * Generate heatmap grid cells (50m x 50m)
  * Groups location updates into grid cells and calculates intensity
  */
-export const computeEventHeatmap = (allUpdates, gridSizeM = 100) => {
+export const computeEventHeatmap = (allUpdates, gridSizeM = 50) => {
   if (!allUpdates || allUpdates.length === 0) {
     return {
       grid_cells: [],
