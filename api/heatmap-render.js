@@ -397,12 +397,10 @@ export const generateTeamPathsExport = async (teamPaths, options = {}) => {
       return `${canvasPoint.x.toFixed(2)},${canvasPoint.y.toFixed(2)}`;
     }).join(' ');
 
-    const endPoint = pointToCanvas(team.points[team.points.length - 1], bounds, pixelWidth, pixelHeight);
     const color = team.team_color || '#2563eb';
 
     body.push(`
       <polyline points="${pathPoints}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.9" />
-      <circle cx="${endPoint.x.toFixed(2)}" cy="${endPoint.y.toFixed(2)}" r="5" fill="${color}" stroke="#ffffff" stroke-width="1.5" />
     `);
   });
 
@@ -466,7 +464,7 @@ export const generateDwellPointsExport = async (dwellPointsByTeam, options = {})
 
   const body = projectedPoints.map((point) => {
     const canvasPoint = pointToCanvas(point, bounds, pixelWidth, pixelHeight);
-    const radius = Math.max(4, metersToCanvasRadius(50/2, bounds, pixelWidth, pixelHeight));
+    const radius = Math.max(2, metersToCanvasRadius(12.5, bounds, pixelWidth, pixelHeight));
     const fill = point.team_color || '#dc2626';
 
     return `
