@@ -169,12 +169,12 @@ export const generateHeatmapPNG = async (gridCells, pixelSize = 512) => {
     }
 
     // Get color for intensity
-    const visualIntensity = Math.sqrt(Math.max(0, Math.min(1, cell.intensity)));
+    const visualIntensity = Math.pow(Math.max(0, Math.min(1, cell.intensity)), 1.4);
     const rgb = intensityToRgb(visualIntensity);
     const pixelIndex = (y * pixelWidth + x) * channels;
 
     // Plot with a minimum opacity so lower-intensity cells remain readable.
-    const alpha = Math.round(255 * (0.30 + 0.70 * visualIntensity));
+    const alpha = Math.round(255 * visualIntensity);
     data[pixelIndex] = rgb.r;       // R
     data[pixelIndex + 1] = rgb.g;   // G
     data[pixelIndex + 2] = rgb.b;   // B
@@ -394,13 +394,12 @@ export const generateTeamPathsExport = async (teamPaths, options = {}) => {
       return `${canvasPoint.x.toFixed(2)},${canvasPoint.y.toFixed(2)}`;
     }).join(' ');
 
-    const labelPoint = pointToCanvas(team.points[Math.floor(team.points.length / 2)], bounds, pixelWidth, pixelHeight);
     const endPoint = pointToCanvas(team.points[team.points.length - 1], bounds, pixelWidth, pixelHeight);
     const color = team.team_color || '#2563eb';
 
     body.push(`
-      <polyline points="${pathPoints}" fill="none" stroke="${color}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.9" />
-      <circle cx="${endPoint.x.toFixed(2)}" cy="${endPoint.y.toFixed(2)}" r="5" fill="${color}" stroke="#ffffff" stroke-width="4" />
+      <polyline points="${pathPoints}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.9" />
+      <circle cx="${endPoint.x.toFixed(2)}" cy="${endPoint.y.toFixed(2)}" r="5" fill="${color}" stroke="#ffffff" stroke-width="1.5" />
     `);
   });
 
@@ -468,7 +467,7 @@ export const generateDwellPointsExport = async (dwellPointsByTeam, options = {})
     const fill = point.team_color || '#dc2626';
 
     return `
-      <circle cx="${canvasPoint.x.toFixed(2)}" cy="${canvasPoint.y.toFixed(2)}" r="${radius.toFixed(2)}" fill="none" stroke="${fill}" stroke-opacity="0.75" stroke-width="6" />
+      <circle cx="${canvasPoint.x.toFixed(2)}" cy="${canvasPoint.y.toFixed(2)}" r="${radius.toFixed(2)}" fill="none" stroke="${fill}" stroke-opacity="0.75" stroke-width="2" />
     `;
   });
 
