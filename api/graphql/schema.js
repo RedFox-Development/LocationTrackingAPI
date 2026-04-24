@@ -183,25 +183,25 @@ export const typeDefs = `
     deletedEvents: Int!
     retentionDays: Int!
     message: String!
+  }
 
-    # Heatmap export with georeferencing
-    type HeatmapBounds {
-      minEast: Float!
-      maxEast: Float!
-      minNorth: Float!
-      maxNorth: Float!
-    }
+  # Heatmap export with georeferencing
+  type HeatmapBounds {
+    minEast: Float!
+    maxEast: Float!
+    minNorth: Float!
+    maxNorth: Float!
+  }
 
-    type HeatmapExport {
-      coordinateSystem: String!
-      png: String
-      pgw: String
-      bounds: HeatmapBounds!
-      pixelWidth: Int!
-      pixelHeight: Int!
-      pngMimeType: String
-      pgwMimeType: String
-    }
+  type HeatmapExport {
+    coordinateSystem: String!
+    png: String
+    pgw: String
+    bounds: HeatmapBounds!
+    pixelWidth: Int!
+    pixelHeight: Int!
+    pngMimeType: String
+    pgwMimeType: String
   }
 
   # Queries
