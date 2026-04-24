@@ -13,7 +13,9 @@
   "dependencies": {
     "graphql": "^16.8.1",
     "graphql-yoga": "^5.1.1",
-    "pg": "^8.11.3"
+    "pg": "^8.11.3",
+    "proj4": "^2.12.1",
+    "sharp": "^0.33.1"
   },
   "private": true
 }

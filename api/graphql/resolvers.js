@@ -9,7 +9,12 @@ import {
   identifyStationaryPoints,
   computeEventHeatmap,
 } from '../analytics.js';
-import { GraphQLScalarType, Kind } from 'graphql';
+import {
+  generateHeatmapExport,
+  generateTeamPathsExport,
+  generateDwellPointsExport,
+} from '../heatmap-render.js';
+import { GraphQLError, GraphQLScalarType, Kind } from 'graphql';
 
 const WAYPOINT_VISIT_RADIUS_METERS = 15;
 const WAYPOINT_CONSECUTIVE_UPDATES_REQUIRED = 3;
@@ -231,7 +236,7 @@ export const resolvers = {
       );
 
       if (eventResult.rows.length === 0) {
-        throw new Error('Invalid event name or keycode');
+        throw new GraphQLError('Invalid event name or keycode');
       }
 
       const eventRow = eventResult.rows[0];
@@ -596,6 +601,182 @@ export const resolvers = {
         team_metrics: teamMetrics,
         dwell_points_by_team: JSON.stringify(dwellPointsByTeam),
         heatmap,
+      };
+    },
+
+    heatmapExport: async (_, { event_id, keycode, pixelSize = 512 }) => {
+      // Verify authentication
+      const eventResult = await query(
+        'SELECT id FROM events WHERE id = $1 AND keycode = $2',
+        [event_id, keycode]
+      );
+
+      if (eventResult.rows.length === 0) {
+        throw new Error('Invalid event ID or keycode');
+      }
+
+      // Get all location updates for this event
+      const updatesResult = await query(
+        `SELECT l.lat, l.lon, l.timestamp
+         FROM location_updates l
+         JOIN teams t ON t.name = l.team
+         WHERE t.event_id = $1
+         ORDER BY l.timestamp ASC`,
+        [event_id]
+      );
+
+      const updates = updatesResult.rows.map((row) => ({
+        lat: parseFloat(row.lat),
+        lon: parseFloat(row.lon),
+        timestamp: row.timestamp,
+      }));
+
+      // Compute heatmap
+      const heatmap = computeEventHeatmap(updates);
+
+      if (heatmap.grid_cells.length === 0) {
+        throw new Error('No location data available for heatmap generation');
+      }
+
+      // Generate heatmap export (PNG + PGW)
+      const heatmapData = await generateHeatmapExport(heatmap.grid_cells, {
+        pixelSize,
+        format: 'combined',
+      });
+
+      return {
+        coordinateSystem: heatmapData.coordinateSystem,
+        png: heatmapData.png,
+        pgw: heatmapData.pgw,
+        bounds: heatmapData.bounds,
+        pixelWidth: heatmapData.pixelWidth,
+        pixelHeight: heatmapData.pixelHeight,
+        pngMimeType: heatmapData.pngMimeType,
+        pgwMimeType: heatmapData.pgwMimeType,
+      };
+    },
+
+    teamPathsExport: async (_, { event_id, keycode, pixelSize = 1024 }) => {
+      const eventResult = await query(
+        'SELECT id FROM events WHERE id = $1 AND keycode = $2',
+        [event_id, keycode]
+      );
+
+      if (eventResult.rows.length === 0) {
+        throw new Error('Invalid event ID or keycode');
+      }
+
+      const updatesResult = await query(
+        `SELECT t.id as team_id, t.name as team_name, t.color as team_color,
+                l.lat, l.lon, l.timestamp
+         FROM location_updates l
+         JOIN teams t ON t.name = l.team
+         WHERE t.event_id = $1
+         ORDER BY t.id ASC, l.timestamp ASC`,
+        [event_id]
+      );
+
+      const updatesByTeam = new Map();
+      updatesResult.rows.forEach((row) => {
+        if (!updatesByTeam.has(row.team_id)) {
+          updatesByTeam.set(row.team_id, {
+            team_id: row.team_id,
+            team_name: row.team_name,
+            team_color: row.team_color,
+            updates: [],
+          });
+        }
+
+        updatesByTeam.get(row.team_id).updates.push({
+          lat: parseFloat(row.lat),
+          lon: parseFloat(row.lon),
+          timestamp: row.timestamp,
+        });
+      });
+
+      const teamPaths = Array.from(updatesByTeam.values()).filter((team) => team.updates.length >= 2);
+      if (teamPaths.length === 0) {
+        throw new Error('No team paths available for export');
+      }
+
+      const exportData = await generateTeamPathsExport(teamPaths, { pixelSize });
+
+      return {
+        coordinateSystem: exportData.coordinateSystem,
+        png: exportData.png,
+        pgw: exportData.pgw,
+        bounds: exportData.bounds,
+        pixelWidth: exportData.pixelWidth,
+        pixelHeight: exportData.pixelHeight,
+        pngMimeType: exportData.pngMimeType,
+        pgwMimeType: exportData.pgwMimeType,
+      };
+    },
+
+    dwellPointsExport: async (_, { event_id, keycode, pixelSize = 1024 }) => {
+      const eventResult = await query(
+        'SELECT id FROM events WHERE id = $1 AND keycode = $2',
+        [event_id, keycode]
+      );
+
+      if (eventResult.rows.length === 0) {
+        throw new Error('Invalid event ID or keycode');
+      }
+
+      const updatesResult = await query(
+        `SELECT t.id as team_id, t.name as team_name, t.color as team_color,
+                l.lat, l.lon, l.timestamp
+         FROM location_updates l
+         JOIN teams t ON t.name = l.team
+         WHERE t.event_id = $1
+         ORDER BY t.id ASC, l.timestamp ASC`,
+        [event_id]
+      );
+
+      const updatesByTeam = new Map();
+      updatesResult.rows.forEach((row) => {
+        if (!updatesByTeam.has(row.team_id)) {
+          updatesByTeam.set(row.team_id, {
+            team_id: row.team_id,
+            team_name: row.team_name,
+            team_color: row.team_color,
+            updates: [],
+          });
+        }
+
+        updatesByTeam.get(row.team_id).updates.push({
+          lat: parseFloat(row.lat),
+          lon: parseFloat(row.lon),
+          timestamp: row.timestamp,
+        });
+      });
+
+      const dwellPointsByTeam = {};
+      for (const [teamId, team] of updatesByTeam.entries()) {
+        const dwellResult = identifyStationaryPoints(team.updates);
+        dwellPointsByTeam[teamId] = {
+          team_name: team.team_name,
+          team_color: team.team_color,
+          dwell_points: dwellResult.dwell_points,
+        };
+      }
+
+      const hasAnyDwellPoints = Object.values(dwellPointsByTeam).some((team) => team.dwell_points.length > 0);
+      if (!hasAnyDwellPoints) {
+        throw new Error('No dwell points available for export');
+      }
+
+      const exportData = await generateDwellPointsExport(dwellPointsByTeam, { pixelSize });
+
+      return {
+        coordinateSystem: exportData.coordinateSystem,
+        png: exportData.png,
+        pgw: exportData.pgw,
+        bounds: exportData.bounds,
+        pixelWidth: exportData.pixelWidth,
+        pixelHeight: exportData.pixelHeight,
+        pngMimeType: exportData.pngMimeType,
+        pgwMimeType: exportData.pgwMimeType,
       };
     },
   },

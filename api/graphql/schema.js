@@ -183,6 +183,25 @@ export const typeDefs = `
     deletedEvents: Int!
     retentionDays: Int!
     message: String!
+
+    # Heatmap export with georeferencing
+    type HeatmapBounds {
+      minEast: Float!
+      maxEast: Float!
+      minNorth: Float!
+      maxNorth: Float!
+    }
+
+    type HeatmapExport {
+      coordinateSystem: String!
+      png: String
+      pgw: String
+      bounds: HeatmapBounds!
+      pixelWidth: Int!
+      pixelHeight: Int!
+      pngMimeType: String
+      pgwMimeType: String
+    }
   }
 
   # Queries
@@ -216,6 +235,15 @@ export const typeDefs = `
 
     # Get event analytics (requires authentication)
     eventAnalytics(event_id: Int!, keycode: String!): EventAnalytics!
+
+    # Export heatmap as PNG with PGW georeferencing (requires authentication)
+    heatmapExport(event_id: Int!, keycode: String!, pixelSize: Int): HeatmapExport!
+
+    # Export labeled team paths as PNG with PGW georeferencing (requires authentication)
+    teamPathsExport(event_id: Int!, keycode: String!, pixelSize: Int): HeatmapExport!
+
+    # Export dwell points as PNG with PGW georeferencing (requires authentication)
+    dwellPointsExport(event_id: Int!, keycode: String!, pixelSize: Int): HeatmapExport!
   }
 
   # Mutations
