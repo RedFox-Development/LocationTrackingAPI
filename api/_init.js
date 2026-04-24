@@ -19,11 +19,12 @@ CREATE TABLE IF NOT EXISTS events (
     organization_name VARCHAR(255),
     expiration_date TIMESTAMPTZ,
     timezone VARCHAR(100) NOT NULL DEFAULT 'UTC',
-    start_date TIMESTAMPTZ,
-    end_date TIMESTAMPTZ,
+    timeframe_start TIMESTAMPTZ,
+    timeframe_end TIMESTAMPTZ,
     team_access_timeframe_start TIMESTAMPTZ,
     team_access_timeframe_end TIMESTAMPTZ,
-    CHECK (expiration_date IS NULL OR end_date IS NULL OR end_date <= expiration_date),
+    CHECK (expiration_date IS NULL OR timeframe_end IS NULL OR timeframe_end <= expiration_date),
+    CHECK (timeframe_start IS NULL OR timeframe_end IS NULL OR timeframe_start <= timeframe_end),
     CHECK (team_access_timeframe_start IS NULL OR team_access_timeframe_end IS NULL OR team_access_timeframe_start <= team_access_timeframe_end),
     UNIQUE(name, keycode)
 );
@@ -77,7 +78,7 @@ CREATE INDEX IF NOT EXISTS idx_location_updates_timestamp ON location_updates(ti
 CREATE INDEX IF NOT EXISTS idx_events_name_keycode ON events(name, keycode);
 CREATE INDEX IF NOT EXISTS idx_events_name_view_keycode ON events(name, view_keycode);
 CREATE INDEX IF NOT EXISTS idx_events_expiration ON events(expiration_date);
-CREATE INDEX IF NOT EXISTS idx_events_timeframe ON events(start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_events_timeframe ON events(timeframe_start, timeframe_end);
 
 CREATE INDEX IF NOT EXISTS idx_teams_activated ON teams(activated);
 CREATE INDEX IF NOT EXISTS idx_waypoints_event_id ON waypoints(event_id);
@@ -124,45 +125,9 @@ BEGIN
   END IF;
 END $$;
 
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_name = 'events'
-      AND column_name = 'start_date'
-      AND data_type = 'timestamp without time zone'
-  ) THEN
-    ALTER TABLE events
-    ALTER COLUMN start_date TYPE TIMESTAMPTZ
-    USING CASE
-      WHEN start_date IS NULL THEN NULL
-      ELSE start_date AT TIME ZONE 'UTC'
-    END;
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_name = 'events'
-      AND column_name = 'end_date'
-      AND data_type = 'timestamp without time zone'
-  ) THEN
-    ALTER TABLE events
-    ALTER COLUMN end_date TYPE TIMESTAMPTZ
-    USING CASE
-      WHEN end_date IS NULL THEN NULL
-      ELSE end_date AT TIME ZONE 'UTC'
-    END;
-  END IF;
-END $$;
-
 ALTER TABLE events ADD COLUMN IF NOT EXISTS timezone VARCHAR(100);
-ALTER TABLE events ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ;
-ALTER TABLE events ADD COLUMN IF NOT EXISTS end_date TIMESTAMPTZ;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS timeframe_start TIMESTAMPTZ;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS timeframe_end TIMESTAMPTZ;
 UPDATE events
 SET timezone = 'UTC'
 WHERE timezone IS NULL OR timezone = '';
@@ -178,7 +143,7 @@ BEGIN
   ) THEN
     ALTER TABLE events
     ADD CONSTRAINT events_timeframe_valid
-    CHECK (start_date IS NULL OR end_date IS NULL OR start_date <= end_date);
+    CHECK (timeframe_start IS NULL OR timeframe_end IS NULL OR timeframe_start <= timeframe_end);
   END IF;
 END $$;
 
@@ -191,7 +156,7 @@ BEGIN
   ) THEN
     ALTER TABLE events
     ADD CONSTRAINT events_end_not_after_expiration
-    CHECK (expiration_date IS NULL OR end_date IS NULL OR end_date <= expiration_date);
+    CHECK (expiration_date IS NULL OR timeframe_end IS NULL OR timeframe_end <= expiration_date);
   END IF;
 END $$;
 
