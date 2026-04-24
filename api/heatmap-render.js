@@ -334,10 +334,9 @@ const pointToCanvas = (point, bounds, pixelWidth, pixelHeight) => ({
   y: ((bounds.maxNorth - point.north) / (bounds.maxNorth - bounds.minNorth)) * (pixelHeight - 1),
 });
 
-const buildExportSvg = ({ pixelWidth, pixelHeight, title, body }) => `
+const buildExportSvg = ({ pixelWidth, pixelHeight, body }) => `
 <svg xmlns="http://www.w3.org/2000/svg" width="${pixelWidth}" height="${pixelHeight}" viewBox="0 0 ${pixelWidth} ${pixelHeight}">
   <rect width="100%" height="100%" fill="rgba(255,255,255,0)" />
-  ${title ? `<text x="20" y="32" font-family="${FONT_FAMILY}" font-size="22" font-weight="700" fill="#111827" stroke="#ffffff" stroke-width="4" paint-order="stroke fill">${escapeXml(title)}</text>` : ''}
   ${body}
 </svg>`;
 
@@ -402,14 +401,12 @@ export const generateTeamPathsExport = async (teamPaths, options = {}) => {
     body.push(`
       <polyline points="${pathPoints}" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity="0.9" />
       <circle cx="${endPoint.x.toFixed(2)}" cy="${endPoint.y.toFixed(2)}" r="5" fill="${color}" stroke="#ffffff" stroke-width="2" />
-      ${makeLabelText(team.team_name || `Team ${team.team_id}`, (labelPoint.x + 10).toFixed(2), (labelPoint.y - 10).toFixed(2), color)}
     `);
   });
 
   const svg = buildExportSvg({
     pixelWidth,
     pixelHeight,
-    title: 'Team Paths',
     body: body.join('\n'),
   });
 
@@ -468,22 +465,18 @@ export const generateDwellPointsExport = async (dwellPointsByTeam, options = {})
   const body = projectedPoints.map((point) => {
     const canvasPoint = pointToCanvas(point, bounds, pixelWidth, pixelHeight);
     const radius = Math.max(4, metersToCanvasRadius(50, bounds, pixelWidth, pixelHeight));
-    const label = `${point.team_name} (${point.duration_minutes}m)`;
     const fill = point.team_color || '#dc2626';
 
     return `
       <circle cx="${canvasPoint.x.toFixed(2)}" cy="${canvasPoint.y.toFixed(2)}" r="${radius.toFixed(2)}" fill="none" stroke="${fill}" stroke-opacity="0.75" stroke-width="3" />
-      ${makeLabelText(label, (canvasPoint.x + radius + 6).toFixed(2), (canvasPoint.y - radius - 6).toFixed(2), fill)}
     `;
   });
 
   const svg = buildExportSvg({
     pixelWidth,
     pixelHeight,
-    title: 'Dwell Points',
     body: body.join('\n'),
   });
-
   const pngBuffer = await renderSvgToPng(svg);
   const pgwContent = generatePGWContent(bounds, pixelWidth, pixelHeight);
 
