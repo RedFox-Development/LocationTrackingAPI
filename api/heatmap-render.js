@@ -91,6 +91,15 @@ const calculateBounds = (gridCells) => {
   };
 };
 
+const FONT_FAMILY = 'DejaVu Sans, Liberation Sans, Noto Sans, sans-serif';
+
+const metersToCanvasRadius = (meters, bounds, pixelWidth, pixelHeight) => {
+  const metersPerPixelX = (bounds.maxEast - bounds.minEast) / Math.max(pixelWidth - 1, 1);
+  const metersPerPixelY = (bounds.maxNorth - bounds.minNorth) / Math.max(pixelHeight - 1, 1);
+  const metersPerPixel = Math.max(metersPerPixelX, metersPerPixelY) || 1;
+  return meters / metersPerPixel;
+};
+
 /**
  * Create PNG heatmap from grid cells
  * Returns: { pngBuffer, bounds, pixelWidth, pixelHeight }
@@ -160,11 +169,12 @@ export const generateHeatmapPNG = async (gridCells, pixelSize = 512) => {
     }
 
     // Get color for intensity
-    const rgb = intensityToRgb(cell.intensity);
+    const visualIntensity = Math.sqrt(Math.max(0, Math.min(1, cell.intensity)));
+    const rgb = intensityToRgb(visualIntensity);
     const pixelIndex = (y * pixelWidth + x) * channels;
 
-    // Plot with alpha based on intensity (more intense = more opaque)
-    const alpha = Math.round(255 * cell.intensity);
+    // Plot with a minimum opacity so lower-intensity cells remain readable.
+    const alpha = Math.round(255 * (0.30 + 0.70 * visualIntensity));
     data[pixelIndex] = rgb.r;       // R
     data[pixelIndex + 1] = rgb.g;   // G
     data[pixelIndex + 2] = rgb.b;   // B
@@ -327,14 +337,14 @@ const pointToCanvas = (point, bounds, pixelWidth, pixelHeight) => ({
 const buildExportSvg = ({ pixelWidth, pixelHeight, title, body }) => `
 <svg xmlns="http://www.w3.org/2000/svg" width="${pixelWidth}" height="${pixelHeight}" viewBox="0 0 ${pixelWidth} ${pixelHeight}">
   <rect width="100%" height="100%" fill="rgba(255,255,255,0)" />
-  ${title ? `<text x="20" y="32" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#111827" stroke="#ffffff" stroke-width="4" paint-order="stroke fill">${escapeXml(title)}</text>` : ''}
+  ${title ? `<text x="20" y="32" font-family="${FONT_FAMILY}" font-size="22" font-weight="700" fill="#111827" stroke="#ffffff" stroke-width="4" paint-order="stroke fill">${escapeXml(title)}</text>` : ''}
   ${body}
 </svg>`;
 
 const renderSvgToPng = async (svgMarkup) => sharp(Buffer.from(svgMarkup)).png().toBuffer();
 
 const makeLabelText = (text, x, y, fill) => `
-  <text x="${x}" y="${y}" font-family="Arial, sans-serif" font-size="14" font-weight="700"
+  <text x="${x}" y="${y}" font-family="${FONT_FAMILY}" font-size="14" font-weight="700"
         fill="${fill}" stroke="#ffffff" stroke-width="3" paint-order="stroke fill">${escapeXml(text)}</text>`;
 
 /**
@@ -457,12 +467,12 @@ export const generateDwellPointsExport = async (dwellPointsByTeam, options = {})
 
   const body = projectedPoints.map((point) => {
     const canvasPoint = pointToCanvas(point, bounds, pixelWidth, pixelHeight);
-    const radius = Math.max(5, Math.min(14, 4 + point.cluster_size));
+    const radius = Math.max(4, metersToCanvasRadius(50, bounds, pixelWidth, pixelHeight));
     const label = `${point.team_name} (${point.duration_minutes}m)`;
     const fill = point.team_color || '#dc2626';
 
     return `
-      <circle cx="${canvasPoint.x.toFixed(2)}" cy="${canvasPoint.y.toFixed(2)}" r="${radius}" fill="${fill}" fill-opacity="0.8" stroke="#ffffff" stroke-width="2" />
+      <circle cx="${canvasPoint.x.toFixed(2)}" cy="${canvasPoint.y.toFixed(2)}" r="${radius.toFixed(2)}" fill="none" stroke="${fill}" stroke-opacity="0.75" stroke-width="3" />
       ${makeLabelText(label, (canvasPoint.x + radius + 6).toFixed(2), (canvasPoint.y - radius - 6).toFixed(2), fill)}
     `;
   });

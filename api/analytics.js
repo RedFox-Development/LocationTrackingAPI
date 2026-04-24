@@ -285,7 +285,7 @@ export const computeEventHeatmap = (allUpdates, gridSizeM = 100) => {
   // Normalize intensity (0-1)
   const maxCount = Math.max(...gridCells.map((c) => c.update_count));
   gridCells.forEach((cell) => {
-    cell.intensity = Math.round((cell.update_count / maxCount) * 100) / 100;
+    cell.intensity = maxCount > 0 ? cell.update_count / maxCount : 0;
   });
 
   const eventCentroid = {
