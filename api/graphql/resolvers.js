@@ -116,6 +116,60 @@ function validateWindowOrdering(startDate, endDate) {
   }
 }
 
+function geofenceCentroidFromJson(geofenceJson) {
+  if (!geofenceJson) {
+    return null;
+  }
+
+  let parsed;
+  try {
+    parsed = typeof geofenceJson === 'string' ? JSON.parse(geofenceJson) : geofenceJson;
+  } catch {
+    return null;
+  }
+
+  if (!Array.isArray(parsed) || parsed.length < 3) {
+    return null;
+  }
+
+  const points = parsed
+    .map((point) => {
+      if (!Array.isArray(point) || point.length < 2) return null;
+      const lat = Number(point[0]);
+      const lon = Number(point[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      return [lat, lon];
+    })
+    .filter(Boolean);
+
+  if (points.length < 3) {
+    return null;
+  }
+
+  const [firstLat, firstLon] = points[0];
+  const [lastLat, lastLon] = points[points.length - 1];
+  const uniquePoints =
+    firstLat === lastLat && firstLon === lastLon ? points.slice(0, -1) : points;
+
+  if (uniquePoints.length < 3) {
+    return null;
+  }
+
+  const sums = uniquePoints.reduce(
+    (acc, [lat, lon]) => {
+      acc.lat += lat;
+      acc.lon += lon;
+      return acc;
+    },
+    { lat: 0, lon: 0 }
+  );
+
+  return {
+    latitude: Math.round((sums.lat / uniquePoints.length) * 1000000) / 1000000,
+    longitude: Math.round((sums.lon / uniquePoints.length) * 1000000) / 1000000,
+  };
+}
+
 export const resolvers = {
   DateTime: new GraphQLScalarType({
     name: 'DateTime',
@@ -520,13 +574,15 @@ export const resolvers = {
     eventAnalytics: async (_, { event_id, keycode }) => {
       // Verify authentication
       const eventResult = await query(
-        'SELECT id FROM events WHERE id = $1 AND keycode = $2',
+        'SELECT id, geofence_data FROM events WHERE id = $1 AND keycode = $2',
         [event_id, keycode]
       );
 
       if (eventResult.rows.length === 0) {
         throw new Error('Invalid event ID or keycode');
       }
+
+      const geofenceCentroid = geofenceCentroidFromJson(eventResult.rows[0]?.geofence_data);
 
       // Get all location updates for this event with team info
       const updatesResult = await query(
@@ -558,8 +614,8 @@ export const resolvers = {
             max_intensity: 0,
             min_intensity: 0,
             total_non_stationary_updates: 0,
-            event_centroid: null,
-            cellSizeMeters: 100,
+            event_centroid: geofenceCentroid,
+            cellSizeMeters: 50,
           },
         };
       }
@@ -596,6 +652,9 @@ export const resolvers = {
 
       // Compute event-wide heatmap
       const heatmap = computeEventHeatmap(updates);
+      if (geofenceCentroid) {
+        heatmap.event_centroid = geofenceCentroid;
+      }
 
       return {
         team_metrics: teamMetrics,

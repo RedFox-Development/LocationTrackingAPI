@@ -169,12 +169,15 @@ export const generateHeatmapPNG = async (gridCells, pixelSize = 512) => {
     }
 
     // Get color for intensity
-    const visualIntensity = Math.pow(Math.max(0, Math.min(1, cell.intensity)), 1.4);
+    const normalizedIntensity = Math.max(0, Math.min(1, cell.intensity));
+    const visualIntensity = Math.pow(normalizedIntensity, 0.9);
     const rgb = intensityToRgb(visualIntensity);
     const pixelIndex = (y * pixelWidth + x) * channels;
 
-    // Plot with a minimum opacity so lower-intensity cells remain readable.
-    const alpha = Math.round(255 * visualIntensity);
+    // Keep lower-intensity cells visible without restoring the earlier broad coverage.
+    const alpha = normalizedIntensity <= 0
+      ? 0
+      : Math.round(255 * (0.10 + 0.90 * Math.pow(normalizedIntensity, 1.1)));
     data[pixelIndex] = rgb.r;       // R
     data[pixelIndex + 1] = rgb.g;   // G
     data[pixelIndex + 2] = rgb.b;   // B
@@ -463,11 +466,11 @@ export const generateDwellPointsExport = async (dwellPointsByTeam, options = {})
 
   const body = projectedPoints.map((point) => {
     const canvasPoint = pointToCanvas(point, bounds, pixelWidth, pixelHeight);
-    const radius = Math.max(4, metersToCanvasRadius(50, bounds, pixelWidth, pixelHeight));
+    const radius = Math.max(4, metersToCanvasRadius(50/2, bounds, pixelWidth, pixelHeight));
     const fill = point.team_color || '#dc2626';
 
     return `
-      <circle cx="${canvasPoint.x.toFixed(2)}" cy="${canvasPoint.y.toFixed(2)}" r="${radius.toFixed(2)}" fill="none" stroke="${fill}" stroke-opacity="0.75" stroke-width="2" />
+      <circle cx="${canvasPoint.x.toFixed(2)}" cy="${canvasPoint.y.toFixed(2)}" r="${radius.toFixed(2)}" fill="none" stroke="${fill}" stroke-opacity="0.75" stroke-width="1.5" />
     `;
   });
 
