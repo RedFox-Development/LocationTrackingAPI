@@ -399,13 +399,6 @@ export const typeDefs = `
       keycode: String!
       update_frequency: Int!
     ): Event!
-
-    # Update event API URL (requires authentication)
-    updateEventApiUrl(
-      event_id: Int!
-      keycode: String!
-      api_url: String!
-    ): Event!
     
     # Cleanup expired data (internal/admin use)
     cleanupExpiredData(secret: String!): CleanupResult!
