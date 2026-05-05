@@ -842,7 +842,7 @@ export const resolvers = {
 
   Mutation: {
     // Create a new event
-    createEvent: async (_, { name, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, update_frequency, api_url }) => {
+    createEvent: async (_, { name, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, update_frequency }) => {
       const normalizedExpiration = normalizeExpirationToEndOfDayUtc(expiration_date);
 
       // Validate and normalize update_frequency
@@ -856,10 +856,10 @@ export const resolvers = {
       const fieldKeycode = generateKeycode();
       
       const result = await query(
-        `INSERT INTO events (name, keycode, view_keycode, field_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, update_frequency, api_url)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-         RETURNING id, name, keycode, view_keycode, field_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, update_frequency, api_url`,
-        [name, keycode, viewKeycode, fieldKeycode, image_data || null, image_mime_type || null, logo_data || null, logo_mime_type || null, organization_name || null, normalizedExpiration, timezone || 'UTC', frequency, api_url || null]
+        `INSERT INTO events (name, keycode, view_keycode, field_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, update_frequency)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         RETURNING id, name, keycode, view_keycode, field_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, update_frequency`,
+        [name, keycode, viewKeycode, fieldKeycode, image_data || null, image_mime_type || null, logo_data || null, logo_mime_type || null, organization_name || null, normalizedExpiration, timezone || 'UTC', frequency]
       );
       
       return { ...result.rows[0], access_level: 'manage' };

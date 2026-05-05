@@ -24,7 +24,6 @@ export const typeDefs = `
     timeframe_end: DateTime
     geofence_data: String
     update_frequency: Int
-    api_url: String
     teams: [Team!]!
   }
 
@@ -261,7 +260,6 @@ export const typeDefs = `
       expiration_date: DateTime
       timezone: String
       update_frequency: Int
-      api_url: String
       start_date: String
       end_date: String
     ): Event!
