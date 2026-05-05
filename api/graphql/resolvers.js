@@ -532,10 +532,14 @@ export const resolvers = {
 
       console.log('[GraphQL] Query.waypoints returning', result.rows.length, 'waypoints');
       return result.rows.map((row) => ({
-        ...row,
+        id: row.id,
+        event_id: row.event_id,
+        name: row.name,
         lat: parseFloat(row.lat),
         lon: parseFloat(row.lon),
+        type: row.type,
         pointValue: row.point_value,
+        is_required: row.is_required,
         created_at: toIsoDateTime(row.created_at),
       }));
     },
@@ -1099,10 +1103,14 @@ export const resolvers = {
 
       const row = result.rows[0];
       return {
-        ...row,
+        id: row.id,
+        event_id: row.event_id,
+        name: row.name,
         lat: parseFloat(row.lat),
         lon: parseFloat(row.lon),
+        type: row.type,
         pointValue: row.point_value,
+        is_required: row.is_required,
         created_at: toIsoDateTime(row.created_at),
       };
     },
@@ -1151,10 +1159,14 @@ export const resolvers = {
 
       const row = result.rows[0];
       return {
-        ...row,
+        id: row.id,
+        event_id: row.event_id,
+        name: row.name,
         lat: parseFloat(row.lat),
         lon: parseFloat(row.lon),
+        type: row.type,
         pointValue: row.point_value,
+        is_required: row.is_required,
         created_at: toIsoDateTime(row.created_at),
       };
     },
@@ -1183,10 +1195,14 @@ export const resolvers = {
 
       const row = waypointResult.rows[0];
       return {
-        ...row,
+        id: row.id,
+        event_id: row.event_id,
+        name: row.name,
         lat: parseFloat(row.lat),
         lon: parseFloat(row.lon),
+        type: row.type,
         pointValue: row.point_value,
+        is_required: row.is_required,
         created_at: toIsoDateTime(row.created_at),
       };
     },
