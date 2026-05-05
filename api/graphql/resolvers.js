@@ -231,7 +231,7 @@ export const resolvers = {
     // Get a specific event
     event: async (_, { id }) => {
       const result = await query(
-        `SELECT id, name, '' AS keycode, '' AS view_keycode, '' AS field_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, COALESCE(update_frequency, 10000) AS update_frequency
+        `SELECT id, name, '' AS keycode, '' AS view_keycode, '' AS field_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, COALESCE(update_frequency, 10000) AS update_frequency, api_url
          FROM events
          WHERE id = $1`,
         [id]
@@ -243,7 +243,7 @@ export const resolvers = {
     // Note: Does not return keycode for security
     eventByName: async (_, { event_name }) => {
       const result = await query(
-        `SELECT id, name, '' AS keycode, '' AS view_keycode, '' AS field_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, COALESCE(update_frequency, 10000) AS update_frequency
+        `SELECT id, name, '' AS keycode, '' AS view_keycode, '' AS field_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, COALESCE(update_frequency, 10000) AS update_frequency, api_url
          FROM events
          WHERE name = $1`,
         [event_name]
@@ -842,7 +842,7 @@ export const resolvers = {
 
   Mutation: {
     // Create a new event
-    createEvent: async (_, { name, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, update_frequency }) => {
+    createEvent: async (_, { name, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, update_frequency, api_url }) => {
       const normalizedExpiration = normalizeExpirationToEndOfDayUtc(expiration_date);
 
       // Validate and normalize update_frequency
@@ -856,10 +856,10 @@ export const resolvers = {
       const fieldKeycode = generateKeycode();
       
       const result = await query(
-        `INSERT INTO events (name, keycode, view_keycode, field_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, update_frequency)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-         RETURNING id, name, keycode, view_keycode, field_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, update_frequency`,
-        [name, keycode, viewKeycode, fieldKeycode, image_data || null, image_mime_type || null, logo_data || null, logo_mime_type || null, organization_name || null, normalizedExpiration, timezone || 'UTC', frequency]
+        `INSERT INTO events (name, keycode, view_keycode, field_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, update_frequency, api_url)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         RETURNING id, name, keycode, view_keycode, field_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, update_frequency, api_url`,
+        [name, keycode, viewKeycode, fieldKeycode, image_data || null, image_mime_type || null, logo_data || null, logo_mime_type || null, organization_name || null, normalizedExpiration, timezone || 'UTC', frequency, api_url || null]
       );
       
       return { ...result.rows[0], access_level: 'manage' };
@@ -1356,9 +1356,11 @@ export const resolvers = {
         `UPDATE events
          SET expiration_date = $1
          WHERE id = $2
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, update_frequency`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, update_frequency, api_url`,
         [normalizedExpiration, event_id]
       );
+
+      return { ...result.rows[0], access_level: 'manage' };
     },
 
     // Update event access timeframe (requires authentication)
@@ -1503,8 +1505,30 @@ export const resolvers = {
         `UPDATE events
          SET update_frequency = $1
          WHERE id = $2
-         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, update_frequency`,
+         RETURNING id, name, keycode, view_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, update_frequency, api_url`,
         [update_frequency, event_id]
+      );
+
+      return { ...result.rows[0], access_level: 'manage' };
+    },
+
+    // Update event API URL (requires authentication)
+    updateEventApiUrl: async (_, { event_id, keycode, api_url }) => {
+      const verifyResult = await query(
+        `SELECT id FROM events WHERE id = $1 AND keycode = $2`,
+        [event_id, keycode]
+      );
+
+      if (verifyResult.rows.length === 0) {
+        throw new Error('Invalid event ID or keycode');
+      }
+
+      const result = await query(
+        `UPDATE events
+         SET api_url = $1
+         WHERE id = $2
+         RETURNING id, name, keycode, view_keycode, field_keycode, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, update_frequency, api_url`,
+        [api_url, event_id]
       );
 
       return { ...result.rows[0], access_level: 'manage' };
@@ -1576,7 +1600,7 @@ export const resolvers = {
   Team: {
     event: async (parent) => {
       const result = await query(
-        `SELECT id, name, '' AS keycode, '' AS view_keycode, '' AS field_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data
+        `SELECT id, name, '' AS keycode, '' AS view_keycode, '' AS field_keycode, NULL::text AS access_level, image_data, image_mime_type, logo_data, logo_mime_type, organization_name, expiration_date, timezone, timeframe_start, timeframe_end, geofence_data, api_url
          FROM events
          WHERE id = $1`,
         [parent.event_id]
