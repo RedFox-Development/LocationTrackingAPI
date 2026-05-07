@@ -302,8 +302,9 @@ export const resolvers = {
         ...eventRow,
         // Never leak the manage keycode to view-only sessions.
         // Return field_keycode if user has field or manage access.
+        // Return view_keycode if user has view access (for ProtectedRoute validation).
         keycode: isManageAccess ? eventRow.keycode : '',
-        view_keycode: isManageAccess ? eventRow.view_keycode : '',
+        view_keycode: (isManageAccess || accessLevel === 'view') ? eventRow.view_keycode : '',
         field_keycode: (isManageAccess || isFieldAccess) ? eventRow.field_keycode : '',
         access_level: accessLevel,
       };
